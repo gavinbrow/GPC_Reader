@@ -1,25 +1,51 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Tab } from '../store';
 import type { Baseline, BaselineStyle } from '../analysis/method';
 import { autoBaseline, snapBaseline } from '../analysis/signal';
 import { despiked } from '../analysis/pipeline';
-import type { ChartSegment } from '../chart/types';
-import { ChartPane, ToolButton, ToolLabel, ToolSelect, ToolSep, ViewFrame } from '../ui/ViewFrame';
+import type { ChartHandle, ChartSegment } from '../chart/types';
+import { ChartPane, GraphModeTools, ToolButton, ToolHint, ToolLabel, ToolSelect, ToolSep, ViewFrame, useViewKeys, type GraphMode } from '../ui/ViewFrame';
 import { NumberInput } from '../ui/PropertyGrid';
 import { useViewContext } from '../ui/useView';
-import { rawAxis, toChartSeries } from '../ui/series';
-import { IconAutofind, IconFit } from '../ui/icons';
+import { toChartSeries } from '../ui/series';
+import { IconAutofind, IconFit, IconNext, IconPrev } from '../ui/icons';
 
+/**
+ * Baselines: one signal is shown at a time. Pick it in the signal list, with
+ * the arrows, or with ↑/↓; a plain drag on the graph sets that signal's
+ * baseline range and the end points can be dragged.
+ */
 export function BaselinesView({ tab }: { tab: Tab }) {
   const ctx = useViewContext(tab);
   const e = ctx?.experiment;
   const analysable = useMemo(() => (e ? e.series.filter((s) => s.analysable) : []), [e]);
   const ls90 = analysable.find((s) => s.kind === 'LS' && s.defaultVisible) ?? analysable[0];
   const [source, setSource] = useState<string>(ls90?.id ?? '');
-  const [visible, setVisible] = useState<Record<string, boolean>>(() => ({ [ls90?.id ?? '']: true }));
   const [drag, setDrag] = useState<Baseline | null>(null);
+  const [mode, setMode] = useState<GraphMode>('draw');
+  const chart = useRef<ChartHandle>(null);
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+
+  const idx = Math.max(0, analysable.findIndex((s) => s.id === source));
+  const select = (i: number) => {
+    const s = analysable[(i + analysable.length) % analysable.length];
+    if (!s) return;
+    setSource(s.id);
+    setDrag(null);
+    rowRefs.current[s.id]?.scrollIntoView({ block: 'nearest' });
+  };
+  useViewKeys((ev) => {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (ev.key === 'ArrowDown' || ev.key === 'PageDown') select(idx + 1);
+    else if (ev.key === 'ArrowUp' || ev.key === 'PageUp') select(idx - 1);
+    else return false;
+    return true;
+  });
+
   if (!ctx || !e) return null;
   const { method, processed, update } = ctx;
+  const sourceSeries = analysable[idx];
+  if (!sourceSeries) return <ViewFrame tab={tab} main={<div className="placeholder">This experiment has no signals that take a baseline.</div>} />;
 
   const setBaseline = (id: string, b: Baseline) => {
     const s = e.series.find((x) => x.id === id)!;
@@ -52,80 +78,62 @@ export function BaselinesView({ tab }: { tab: Tab }) {
     });
   };
 
-  const isVis = (id: string) => !!visible[id] || id === source;
-  const series = analysable.map((s) =>
-    toChartSeries(s, s.time, processed.series[s.id].despiked, { visible: isVis(s.id), axis: rawAxis(s, 'uv'), ls90: s.id === ls90?.id }),
-  );
-  const segments: ChartSegment[] = analysable
-    .filter((s) => isVis(s.id))
-    .map((s) => {
-      const b = drag && drag.seriesId === s.id ? drag : processed.series[s.id].baseline;
-      if (!b) return null;
-      return {
-        id: s.id,
-        x1: b.x1,
-        y1: b.y1,
-        x2: b.x2,
-        y2: b.y2,
-        color: s.id === source ? '#00b7c3' : '#555',
-        axis: rawAxis(s, 'uv'),
-        lineWidth: s.id === source ? 2 : 1.2,
-        editable: true,
-      } as ChartSegment;
-    })
-    .filter((x): x is ChartSegment => !!x);
+  const series = [
+    {
+      ...toChartSeries(sourceSeries, sourceSeries.time, processed.series[sourceSeries.id].despiked, { visible: true, ls90: sourceSeries.id === ls90?.id }),
+      style: 'line' as const,
+    },
+  ];
+  const b = drag && drag.seriesId === source ? drag : processed.series[source]?.baseline;
+  const segments: ChartSegment[] = b ? [{ id: source, x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2, color: '#00a2b8', lineWidth: 2, editable: true }] : [];
+  const unit = sourceSeries.kind === 'UV' ? 'absorbance (AU)' : sourceSeries.kind === 'LS' ? 'detector voltage (V)' : sourceSeries.units ? `${sourceSeries.label} (${sourceSeries.units})` : sourceSeries.label;
 
-  const sourceSeries = analysable.find((s) => s.id === source);
   return (
     <ViewFrame
       tab={tab}
       toolbar={
         <>
-          <ToolButton icon={<IconAutofind />} onClick={() => autofind(analysable.map((s) => s.id))} title="Automatically place baselines for every signal">
-            Autofind Baselines
-          </ToolButton>
-          <ToolButton icon={<IconAutofind />} onClick={() => autofind([source])} title="Automatically place the baseline of the source signal">
-            Autofind Source
-          </ToolButton>
+          <ToolLabel>Signal:</ToolLabel>
+          <ToolButton icon={<IconPrev />} onClick={() => select(idx - 1)} title="Previous signal (↑)" />
+          <ToolSelect value={source} options={analysable.map((s) => ({ value: s.id, label: s.label }))} onChange={(v) => setSource(v)} width={150} />
+          <ToolButton icon={<IconNext />} onClick={() => select(idx + 1)} title="Next signal (↓)" />
           <ToolSep />
-          <ToolLabel>Source:</ToolLabel>
-          <ToolSelect
-            value={source}
-            options={analysable.map((s) => s.id)}
-            onChange={(v) => {
-              setSource(v);
-              setVisible((o) => ({ ...o, [v]: true }));
-            }}
-          />
-          <ToolButton icon={<IconFit />} onClick={setAll} title="Use the source baseline's time range for every signal (Y values snap to each signal)">
+          <GraphModeTools mode={mode} setMode={setMode} drawLabel="Draw Baseline" drawTitle="Drag on the graph to set this signal's baseline range" chart={chart} />
+          <ToolSep />
+          <ToolButton icon={<IconAutofind />} onClick={() => autofind([source])} title="Automatically place the baseline of this signal">
+            Autofind
+          </ToolButton>
+          <ToolButton icon={<IconAutofind />} onClick={() => autofind(analysable.map((s) => s.id))} title="Automatically place baselines for every signal">
+            Autofind All
+          </ToolButton>
+          <ToolButton icon={<IconFit />} onClick={setAll} disabled={!method.baselines[source]} title="Use this signal's baseline time range for every signal (Y values snap to each signal)">
             Set All
           </ToolButton>
-          <span className="muted" style={{ marginLeft: 12 }}>
-            Drag the baseline end points; Shift+drag on the graph sets a new range for the source.
-          </span>
+          <ToolHint>Drag to set the range · drag the end points to adjust · ↑/↓ switch signal</ToolHint>
         </>
       }
       main={
         <ChartPane
-          title="Define Baselines"
+          ref={chart}
+          title={`Define Baselines: ${sourceSeries.label}`}
           series={series}
           segments={segments}
-          legend="right"
+          legend="none"
+          mode={mode}
+          resetKey={idx}
           xAxis={{ label: 'time (min)' }}
-          yAxis={{ label: sourceSeries?.kind === 'UV' ? 'absorbance (AU)' : sourceSeries?.kind === 'LS' ? 'detector voltage (V)' : sourceSeries?.label ?? '' }}
-          y2Axis={{ label: 'absorbance (AU)' }}
-          onToggleSeries={(id, v) => setVisible((o) => ({ ...o, [id]: v }))}
+          yAxis={{ label: unit }}
           onSegmentChange={(id, seg, done) => {
             const cur = method.baselines[id];
             if (!cur) return;
-            const b: Baseline = cur.style === 'Snap-Y' ? { ...cur, x1: seg.x1, x2: seg.x2 } : { ...cur, ...seg };
-            if (b.x1 > b.x2) [b.x1, b.x2, b.y1, b.y2] = [b.x2, b.x1, b.y2, b.y1];
+            const nb: Baseline = cur.style === 'Snap-Y' ? { ...cur, x1: seg.x1, x2: seg.x2 } : { ...cur, ...seg };
+            if (nb.x1 > nb.x2) [nb.x1, nb.x2, nb.y1, nb.y2] = [nb.x2, nb.x1, nb.y2, nb.y1];
             if (done) {
               setDrag(null);
-              setBaseline(id, b);
+              setBaseline(id, nb);
             } else {
               const s = e.series.find((x) => x.id === id)!;
-              setDrag(snapBaseline(s.time, processed.series[id].despiked, b));
+              setDrag(snapBaseline(s.time, processed.series[id].despiked, nb));
             }
           }}
           onCreateRegion={(x1, x2) => {
@@ -139,8 +147,7 @@ export function BaselinesView({ tab }: { tab: Tab }) {
           <table>
             <thead>
               <tr>
-                <th />
-                <th>Visible</th>
+                <th>Signal</th>
                 <th>Style</th>
                 <th>X1 (min)</th>
                 <th>Y1</th>
@@ -150,30 +157,35 @@ export function BaselinesView({ tab }: { tab: Tab }) {
             </thead>
             <tbody>
               {analysable.map((s) => {
-                const b = processed.series[s.id].baseline;
-                const set = (patch: Partial<Baseline>) => b && setBaseline(s.id, { ...b, ...patch });
+                const bl = processed.series[s.id].baseline;
+                const set = (patch: Partial<Baseline>) => bl && setBaseline(s.id, { ...bl, ...patch });
                 return (
-                  <tr key={s.id} className={s.id === source ? 'selected' : undefined} onClick={() => setSource(s.id)}>
-                    <td>{s.id}</td>
+                  <tr
+                    key={s.id}
+                    ref={(el) => {
+                      rowRefs.current[s.id] = el;
+                    }}
+                    className={'clickable' + (s.id === source ? ' selected' : '')}
+                    onClick={() => setSource(s.id)}
+                    title="Click to show this signal"
+                  >
+                    <td>{s.label}</td>
                     <td>
-                      <input type="checkbox" checked={isVis(s.id)} onChange={(ev) => setVisible((o) => ({ ...o, [s.id]: ev.target.checked }))} />
-                    </td>
-                    <td>
-                      <select value={b?.style ?? 'Snap-Y'} onChange={(ev) => set({ style: ev.target.value as BaselineStyle })} disabled={!b}>
+                      <select value={bl?.style ?? 'Snap-Y'} onChange={(ev) => set({ style: ev.target.value as BaselineStyle })} disabled={!bl}>
                         <option>Snap-Y</option>
                         <option>Manual</option>
                       </select>
                     </td>
-                    {b ? (
+                    {bl ? (
                       <>
-                        <td><NumberInput value={b.x1} digits={4} onCommit={(v) => set({ x1: v })} /></td>
-                        <td><NumberInput value={b.y1} digits={6} onCommit={(v) => set({ y1: v, style: 'Manual' })} /></td>
-                        <td><NumberInput value={b.x2} digits={4} onCommit={(v) => set({ x2: v })} /></td>
-                        <td><NumberInput value={b.y2} digits={6} onCommit={(v) => set({ y2: v, style: 'Manual' })} /></td>
+                        <td><NumberInput value={bl.x1} digits={4} onCommit={(v) => set({ x1: v })} /></td>
+                        <td><NumberInput value={bl.y1} digits={6} onCommit={(v) => set({ y1: v, style: 'Manual' })} /></td>
+                        <td><NumberInput value={bl.x2} digits={4} onCommit={(v) => set({ x2: v })} /></td>
+                        <td><NumberInput value={bl.y2} digits={6} onCommit={(v) => set({ y2: v, style: 'Manual' })} /></td>
                       </>
                     ) : (
                       <td colSpan={4} className="muted">
-                        no baseline — use Autofind
+                        no baseline: drag on the graph or use Autofind
                       </td>
                     )}
                   </tr>

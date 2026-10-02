@@ -317,7 +317,7 @@ export const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(props, r
 
   const defaultCursor = () => {
     const m = propsRef.current.mode ?? 'zoom';
-    return m === 'pan' ? 'grab' : m === 'select' ? 'default' : 'crosshair';
+    return m === 'pan' ? 'grab' : m === 'select' ? 'default' : m === 'draw' ? 'col-resize' : 'crosshair';
   };
 
   /* ---------------- imperative handle ---------------- */
@@ -436,7 +436,14 @@ export const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(props, r
         }
         if (!drag) {
           const mode = pr0(propsRef.current);
-          drag = mode === 'pan' ? panDrag() : mode === 'select' ? { ...base, kind: 'none' } : { ...base, kind: 'zoom' };
+          drag =
+            mode === 'pan'
+              ? panDrag()
+              : mode === 'select'
+                ? { ...base, kind: 'none' }
+                : mode === 'draw'
+                  ? { ...base, kind: 'xband' }
+                  : { ...base, kind: 'zoom' };
         }
       }
     } else {

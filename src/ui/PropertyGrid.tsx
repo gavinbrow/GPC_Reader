@@ -31,10 +31,18 @@ interface Props {
   labelWidth?: number;
   columnWidth?: number;
   className?: string;
+  /** Highlighted column (e.g. the selected peak). */
+  selectedColumn?: number;
+  /** Clicking a column header (or any cell of the column) selects it. */
+  onSelectColumn?: (i: number) => void;
+  /** Shows a delete button in each column header. */
+  onDeleteColumn?: (i: number) => void;
+  columnTitle?: string;
 }
 
 /** ASTRA-style property grid: labelled rows, one editable cell per column, collapsible groups. */
-export function PropertyGrid({ columns, rows, labelWidth = 260, columnWidth = 170, className }: Props) {
+export function PropertyGrid({ columns, rows, labelWidth = 260, columnWidth = 170, className, selectedColumn, onSelectColumn, onDeleteColumn, columnTitle }: Props) {
+  const colClass = (ci: number) => (ci === selectedColumn ? ' pg-col-sel' : '');
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const isOpen = (r: PGRow) => open[r.key] ?? !!r.defaultOpen;
   const render = (r: PGRow, depth: number): ReactNode[] => {
@@ -55,7 +63,12 @@ export function PropertyGrid({ columns, rows, labelWidth = 260, columnWidth = 17
         {columns.map((_, ci) => {
           const c = r.cells?.[ci];
           return (
-            <td key={ci} className={'pg-cell' + (!c || c.kind === 'readonly' || (!c.onChange && c.kind !== 'checkbox') ? ' pg-ro' : '')} title={c?.title}>
+            <td
+              key={ci}
+              className={'pg-cell' + (!c || c.kind === 'readonly' || (!c.onChange && c.kind !== 'checkbox') ? ' pg-ro' : '') + colClass(ci)}
+              title={c?.title}
+              onMouseDown={onSelectColumn ? () => ci !== selectedColumn && onSelectColumn(ci) : undefined}
+            >
               {c ? <Cell c={c} /> : null}
             </td>
           );
@@ -80,7 +93,26 @@ export function PropertyGrid({ columns, rows, labelWidth = 260, columnWidth = 17
           <tr>
             <th className="pg-corner" />
             {columns.map((c, i) => (
-              <th key={i}>{c}</th>
+              <th
+                key={i}
+                className={(onSelectColumn ? 'pg-col-head' : '') + colClass(i)}
+                onClick={onSelectColumn ? () => onSelectColumn(i) : undefined}
+                title={columnTitle}
+              >
+                {c}
+                {onDeleteColumn && (
+                  <button
+                    className="pg-col-del"
+                    title="Delete (Del)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteColumn(i);
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </th>
             ))}
             <th className="pg-fill" />
           </tr>

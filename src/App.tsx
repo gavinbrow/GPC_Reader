@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { openFiles, openSample, pickFiles } from './actions';
+import { openFiles, openSample, pickFiles, printReport, saveMethod } from './actions';
 import { useStore } from './store';
 import { MainToolbar, MenuBar, Sidebar, StatusBar, TabStrip, tabTitle } from './ui/Shell';
-import { ActiveTabContext } from './ui/ViewFrame';
+import { ActiveTabContext, isTypingTarget } from './ui/ViewFrame';
 import { ViewHost } from './views';
 import { IconClose, IconExperiment, IconOpen } from './ui/icons';
 
@@ -13,13 +13,44 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
-        e.preventDefault();
-        pickFiles('.afe8');
-      }
+      const s = useStore.getState();
+      const tab = s.tabs.find((t) => t.id === s.activeTabId);
+      const k = e.key.toLowerCase();
+      const mod = e.ctrlKey || e.metaKey;
+      let handled = true;
+      if (mod && k === 'o') pickFiles('.afe8');
+      else if (mod && k === 's') {
+        if (s.selectedExpId) saveMethod();
+      } else if (mod && k === 'p') {
+        if (s.selectedExpId) printReport();
+      } else if (mod && k === 'enter') {
+        if (tab?.draft) s.apply(tab.id);
+      } else if (mod && !e.shiftKey && k === 'z' && !isTypingTarget(e.target)) {
+        if (tab) s.undo(tab.id);
+      } else if (mod && (k === 'y' || (e.shiftKey && k === 'z')) && !isTypingTarget(e.target)) {
+        if (tab) s.redo(tab.id);
+      } else if (e.altKey && k === 'w') {
+        if (tab) s.closeTabs([tab.id]);
+      } else if (e.altKey && e.key === 'PageDown') s.cycleTab(1);
+      else if (e.altKey && e.key === 'PageUp') s.cycleTab(-1);
+      else if (e.key === 'F1') s.openView('about');
+      else handled = false;
+      if (handled) e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // Warn before leaving with work that would be lost.
+    const onUnload = (e: BeforeUnloadEvent) => {
+      const s = useStore.getState();
+      if (s.tabs.some((t) => t.draft) || s.experiments.some((x) => x.modified)) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('beforeunload', onUnload);
+    };
   }, []);
 
   useEffect(() => {

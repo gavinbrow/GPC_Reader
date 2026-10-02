@@ -219,3 +219,45 @@ export const IconExport = (p: P) => (
     <path d="M7 8h7M11.5 5.5L14 8l-2.5 2.5" stroke="#2e7d32" strokeWidth="1.5" fill="none" />
   </S>
 );
+
+/** Draw a range: a shaded band between two edges. */
+export const IconRange = (p: P) => (
+  <S {...p}>
+    <rect x="4" y="2.5" width="8" height="11" fill="#90b4e4" opacity="0.6" />
+    <path d="M4 2v12M12 2v12" stroke="#1565c0" strokeWidth="1.4" />
+    <path d="M1.5 8h4M10.5 8h4" stroke="#333" strokeWidth="1" />
+  </S>
+);
+
+export const IconUndo = (p: P) => (
+  <S {...p}>
+    <path d="M4.5 6.5H10a3.5 3.5 0 0 1 0 7H6" stroke="#2b579a" strokeWidth="1.5" fill="none" />
+    <path d="M7 3.5 4 6.5l3 3" stroke="#2b579a" strokeWidth="1.5" fill="none" />
+  </S>
+);
+
+export const IconRedo = (p: P) => (
+  <S {...p}>
+    <path d="M11.5 6.5H6a3.5 3.5 0 0 0 0 7h4" stroke="#2b579a" strokeWidth="1.5" fill="none" />
+    <path d="M9 3.5l3 3-3 3" stroke="#2b579a" strokeWidth="1.5" fill="none" />
+  </S>
+);
+
+export const IconPrev = (p: P) => (
+  <S {...p}>
+    <path d="M10 3.5 5.5 8l4.5 4.5" stroke="#333" strokeWidth="1.6" fill="none" />
+  </S>
+);
+
+export const IconNext = (p: P) => (
+  <S {...p}>
+    <path d="M6 3.5 10.5 8 6 12.5" stroke="#333" strokeWidth="1.6" fill="none" />
+  </S>
+);
+
+export const IconTrash = (p: P) => (
+  <S {...p}>
+    <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9" stroke="#b71c1c" strokeWidth="1.2" fill="none" />
+    <path d="M7 7v4.5M9 7v4.5" stroke="#b71c1c" strokeWidth="1" />
+  </S>
+);

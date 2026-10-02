@@ -68,6 +68,18 @@ export function saveMethod(expId?: string) {
   if (!entry) return;
   const file: MethodFile = { format: 'openmals-method', version: 1, source: entry.experiment.fileName, method: entry.method };
   download(`${safeFileName(entry.experiment.name)}.method.json`, JSON.stringify(file, null, 2), 'application/json');
+  const st = useStore.getState();
+  const pending = st.tabs.some((t) => t.expId === entry.experiment.id && t.draft);
+  useStore.setState({ experiments: st.experiments.map((x) => (x === entry ? { ...x, modified: false } : x)) });
+  st.setStatus(`Method saved${pending ? ' (changes not yet applied in open views are not included)' : ''}`);
+}
+
+/** Open the report of the selected experiment and print it. */
+export function printReport() {
+  const st = useStore.getState();
+  if (!st.selectedExpId) return;
+  st.openView('report');
+  setTimeout(() => window.print(), 300);
 }
 
 /** Apply a saved method to the selected experiment (like applying an ASTRA method to new data). */

@@ -111,8 +111,11 @@ export interface ChartProps {
   /** Called with the x-range of a new region dragged with Shift held (used to add peaks / baselines). */
   onCreateRegion?: (x1: number, x2: number) => void;
 
-  /** Interaction mode for left-drag in empty plot area. Default 'zoom'. */
-  mode?: 'zoom' | 'pan' | 'select';
+  /**
+   * Interaction mode for left-drag in empty plot area. Default 'zoom'.
+   * 'draw' makes a plain drag define a new x-range (onCreateRegion), like Shift+drag.
+   */
+  mode?: 'zoom' | 'pan' | 'select' | 'draw';
   /** Changing this number resets zoom to autoscale. */
   resetKey?: number;
   className?: string;

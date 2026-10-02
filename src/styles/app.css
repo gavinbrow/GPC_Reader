@@ -230,6 +230,29 @@ code {
   flex-direction: column;
   border-right: 3px solid #d6dbe9;
   background: #fff;
+  position: relative;
+  min-width: 0;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -5px;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 5;
+}
+
+.sidebar-resizer:hover,
+body.resizing-h .sidebar-resizer {
+  background: rgba(21, 101, 192, 0.25);
+}
+
+body.resizing-h,
+body.resizing-h * {
+  cursor: ew-resize !important;
+  user-select: none !important;
 }
 
 .sidebar.collapsed {
@@ -281,6 +304,27 @@ code {
 
 .tree-item:hover {
   background: #e5f1fb;
+}
+
+.tree-close {
+  margin-left: auto;
+  flex: none;
+  border: none;
+  background: none;
+  padding: 1px 3px;
+  border-radius: 2px;
+  color: #666;
+  display: flex;
+  visibility: hidden;
+}
+
+.tree-item:hover .tree-close {
+  visibility: visible;
+}
+
+.tree-close:hover {
+  background: #e8b4b4;
+  color: #000;
 }
 
 .tree-item.active .tree-label {
@@ -386,24 +430,42 @@ button.link {
   min-width: 0;
 }
 
+.tabbar {
+  display: flex;
+  align-items: flex-end;
+  flex: none;
+  min-height: 30px;
+  padding-top: 3px;
+  background: #fff;
+  border-bottom: 2px solid var(--tab-active-border);
+  position: relative;
+  z-index: 15;
+}
+
 .tabstrip {
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  height: 27px;
+  flex: 1;
+  min-width: 0;
   padding: 0 4px;
-  background: #fff;
-  border-bottom: 2px solid var(--tab-active-border);
   overflow-x: auto;
   overflow-y: hidden;
-  flex: none;
+  scrollbar-width: none;
+}
+
+.tabstrip::-webkit-scrollbar {
+  display: none;
 }
 
 .doc-tab {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
+  flex: 0 1 auto;
+  min-width: 96px;
+  max-width: 320px;
+  height: 25px;
   padding: 0 6px 0 14px;
   border: 1px solid #c8cdd8;
   border-bottom: none;
@@ -411,12 +473,47 @@ button.link {
   white-space: nowrap;
   cursor: default;
   clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%);
-  max-width: 460px;
 }
 
-.doc-tab span {
+.doc-tab:hover:not(.active) {
+  background: linear-gradient(#fafbfe, #edf0f6);
+}
+
+.doc-tab-label {
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.tab-list-btn {
+  flex: none;
+  height: 24px;
+  margin: 0 4px 1px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: #444;
+  padding: 0 6px;
+}
+
+.tab-list-btn:hover {
+  background: var(--select);
+  border-color: var(--select-border);
+}
+
+.tab-count {
+  font-size: 11px;
+  color: #666;
+}
+
+.tab-list {
+  right: 4px;
+  left: auto;
+  max-height: 60vh;
+  overflow: auto;
+  min-width: 320px;
+  z-index: 30;
 }
 
 .doc-tab.active {
@@ -426,6 +523,7 @@ button.link {
 }
 
 .tab-close {
+  flex: none;
   border: none;
   background: none;
   padding: 2px;
@@ -686,6 +784,17 @@ button.link {
   color: #a0a0a0;
 }
 
+.view-buttons button.vb-icon {
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-buttons button.vb-icon:disabled svg {
+  opacity: 0.35;
+}
+
 .view-dirty {
   margin-left: 12px;
   color: #8a6d00;
@@ -805,6 +914,57 @@ button.link {
   border: none;
   background: transparent;
   height: 22px;
+}
+
+.pg thead th.pg-col-head {
+  cursor: pointer;
+  position: sticky;
+}
+
+.pg thead th.pg-col-head:hover {
+  background: #e3eefa;
+}
+
+.pg thead th.pg-col-sel,
+.pg thead th.pg-col-sel:hover {
+  background: #1565c0;
+  color: #fff;
+  font-weight: 600;
+}
+
+.pg td.pg-col-sel {
+  box-shadow: inset 2px 0 0 #1565c0, inset -2px 0 0 #1565c0;
+}
+
+.pg-col-del {
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 17px;
+  height: 17px;
+  line-height: 14px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: inherit;
+  opacity: 0;
+  font-size: 14px;
+}
+
+.pg thead th:hover .pg-col-del,
+.pg thead th.pg-col-sel .pg-col-del {
+  opacity: 0.85;
+}
+
+.pg-col-del:hover {
+  background: #c62828;
+  color: #fff;
+  opacity: 1;
+}
+
+tr.clickable {
+  cursor: pointer;
 }
 
 /* ---------------------------------------------------------------- data tables */
@@ -955,4 +1115,56 @@ button.link {
   position: absolute;
   z-index: 30;
   min-width: 200px;
+}
+
+.tool-hint {
+  color: #6b6b6b;
+  margin-left: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+kbd {
+  font-family: var(--font);
+  font-size: 11px;
+  border: 1px solid #bbb;
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 0 4px;
+  background: #fafafa;
+}
+
+.tool-readout {
+  font-variant-numeric: tabular-nums;
+  min-width: 110px;
+  text-align: center;
+  color: #222;
+}
+
+.shortcut-table td {
+  padding: 3px 14px 3px 0;
+  vertical-align: top;
+}
+
+.shortcut-table td:first-child {
+  white-space: nowrap;
+}
+
+.view-error h3 {
+  margin-top: 0;
+  color: #8a1c1c;
+}
+
+.view-error pre {
+  white-space: pre-wrap;
+  background: #fdecea;
+  padding: 8px;
+  border: 1px solid #f5c2c0;
+}
+
+.view-error .big-btn {
+  display: inline-flex;
 }

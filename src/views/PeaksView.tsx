@@ -1,14 +1,14 @@
-import { useState } from 'react';
-import type { Tab } from '../store';
+import { useRef, useState } from 'react';
+import { useStore, type Tab } from '../store';
 import { makePeak, type LSModel, type Method, type Peak } from '../analysis/method';
 import { autoPeaks } from '../analysis/signal';
 import type { Processed } from '../analysis/pipeline';
-import type { ChartRegion, ChartSeries } from '../chart/types';
-import { ChartPane, ToolButton, ToolSep, ViewFrame } from '../ui/ViewFrame';
+import type { ChartHandle, ChartRegion, ChartSeries } from '../chart/types';
+import { ChartPane, GraphModeTools, ToolButton, ToolHint, ToolSep, ViewFrame, useViewKeys, type GraphMode } from '../ui/ViewFrame';
 import { PropertyGrid, type PGRow } from '../ui/PropertyGrid';
 import { useViewContext } from '../ui/useView';
 import { familyLabel, seriesColor, seriesStyle } from '../ui/series';
-import { IconAutofind, IconMinus, IconPlus } from '../ui/icons';
+import { IconAutofind, IconTrash } from '../ui/icons';
 import { ls90Id } from '../analysis/calibration';
 
 /** One representative aligned trace per detector family (LS 90°, UV, dRI, VIS) for relative-scale graphs. */
@@ -85,6 +85,30 @@ export function PeaksView({ tab }: { tab: Tab }) {
   const [sel, setSel] = useState(0);
   const [vis, setVis] = useState<Record<string, boolean>>({});
   const [dragging, setDragging] = useState<{ id: string; x1: number; x2: number } | null>(null);
+  const [mode, setMode] = useState<GraphMode>('draw');
+  const chart = useRef<ChartHandle>(null);
+  const nPeaks = ctx?.method.peaks.length ?? 0;
+  const cur = Math.max(0, Math.min(sel, nPeaks - 1));
+
+  const deletePeak = (i: number) => {
+    if (!ctx || i < 0 || i >= ctx.method.peaks.length) return;
+    const name = ctx.method.peaks[i].name;
+    ctx.update((m) => {
+      const peaks = m.peaks.filter((_, k) => k !== i);
+      return { ...m, peaks, normalization: { ...m.normalization, peakId: peaks.some((p) => p.id === m.normalization.peakId) ? m.normalization.peakId : peaks[0]?.id } };
+    });
+    setSel(Math.max(0, Math.min(i, ctx.method.peaks.length - 2)));
+    useStore.getState().setStatus(`${name} deleted (Ctrl+Z to undo)`);
+  };
+  useViewKeys((ev) => {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey || !nPeaks) return;
+    if (ev.key === 'Delete' || ev.key === 'Backspace') deletePeak(cur);
+    else if (ev.key === 'ArrowLeft') setSel(Math.max(0, cur - 1));
+    else if (ev.key === 'ArrowRight') setSel(Math.min(nPeaks - 1, cur + 1));
+    else return false;
+    return true;
+  });
+
   if (!ctx) return null;
   const { experiment: e, method, processed, update } = ctx;
 
@@ -98,10 +122,10 @@ export function PeaksView({ tab }: { tab: Tab }) {
       peaks[i] = p;
       return { ...m, peaks };
     });
-  const addPeak = (x1: number, x2: number) =>
+  const addPeak = (x1: number, x2: number) => {
+    setSel(method.peaks.length);
     update((m) => {
       const pk = makePeak(e, Math.min(x1, x2), Math.max(x1, x2), m.peaks[m.peaks.length - 1], m.peaks.length + 1);
-      setSel(m.peaks.length);
       return {
         ...m,
         peaks: [...m.peaks, pk],
@@ -111,17 +135,15 @@ export function PeaksView({ tab }: { tab: Tab }) {
         normalization: m.normalization.peakId ? m.normalization : { ...m.normalization, peakId: pk.id },
       };
     });
-  const deletePeak = (i: number) =>
-    update((m) => {
-      const peaks = m.peaks.filter((_, k) => k !== i);
-      setSel(Math.max(0, Math.min(sel, peaks.length - 1)));
-      return { ...m, peaks, normalization: { ...m.normalization, peakId: peaks.some((p) => p.id === m.normalization.peakId) ? m.normalization.peakId : peaks[0]?.id } };
-    });
+  };
   const autofind = () => {
     const id = processed.concSeriesId ?? (processed.series.dRI ? 'dRI' : ls90Id(processed));
     if (!id) return;
     const found = autoPeaks(processed.t, processed.series[id].aligned);
-    if (!found.length) return;
+    if (!found.length) {
+      useStore.getState().setStatus('Autofind found no peaks');
+      return;
+    }
     update((m) => {
       const peaks = found.map(([a, b], i) => ({ ...(m.peaks[i] ?? makePeak(e, a, b, m.peaks[0], i + 1)), start: a, end: b, name: m.peaks[i]?.name ?? `Peak ${i + 1}` }));
       const massFit = { ...m.massFit };
@@ -134,11 +156,12 @@ export function PeaksView({ tab }: { tab: Tab }) {
       }
       return { ...m, peaks, massFit, radiusFit, distribution: { ...m.distribution, ranges }, normalization: { ...m.normalization, peakId: m.normalization.peakId ?? peaks[0]?.id } };
     });
+    useStore.getState().setStatus(`Autofind found ${found.length} peak${found.length > 1 ? 's' : ''}`);
   };
 
   const regions: ChartRegion[] = method.peaks.map((p, i) => {
     const d = dragging?.id === p.id ? dragging : null;
-    return { id: p.id, x1: d ? d.x1 : p.start, x2: d ? d.x2 : p.end, label: p.name, editable: true, selected: i === sel };
+    return { id: p.id, x1: d ? d.x1 : p.start, x2: d ? d.x2 : p.end, label: p.name, editable: true, selected: i === cur };
   });
   const series = familyTraces(processed, (id) => vis[id] ?? true);
   return (
@@ -150,32 +173,22 @@ export function PeaksView({ tab }: { tab: Tab }) {
             Autofind Peaks
           </ToolButton>
           <ToolSep />
-          <ToolButton
-            icon={<IconPlus />}
-            onClick={() => {
-              const pr = processed.peaks[sel];
-              const w = pr ? pr.peak.end - pr.peak.start : 2;
-              const start = pr ? pr.peak.end + 0.1 * w : processed.t[Math.floor(processed.t.length / 2)];
-              addPeak(start, start + w);
-            }}
-            title="Add a peak (or Shift+drag on the graph)"
-          >
-            Add Peak
-          </ToolButton>
-          <ToolButton icon={<IconMinus />} onClick={() => deletePeak(sel)} disabled={!method.peaks.length} title="Delete the selected peak">
+          <GraphModeTools mode={mode} setMode={setMode} drawLabel="Draw Peak" drawTitle="Drag on the graph to add a peak" chart={chart} />
+          <ToolSep />
+          <ToolButton icon={<IconTrash />} onClick={() => deletePeak(cur)} disabled={!method.peaks.length} title="Delete the selected peak (Del)">
             Delete Peak
           </ToolButton>
-          <span className="muted" style={{ marginLeft: 12 }}>
-            Drag peak edges to adjust; Shift+drag to define a new peak; click a peak to select it.
-          </span>
+          <ToolHint>Drag to add a peak · drag edges to adjust · click a peak or its number to select · Del deletes</ToolHint>
         </>
       }
       main={
         <ChartPane
+          ref={chart}
           title="Define Peaks"
           series={series}
           relativeScale
           legend="top"
+          mode={mode}
           regions={regions}
           xAxis={{ label: 'time (min)' }}
           yAxis={{ label: 'Relative Scale' }}
@@ -198,9 +211,18 @@ export function PeaksView({ tab }: { tab: Tab }) {
       }
       bottom={
         method.peaks.length ? (
-          <PropertyGrid columns={method.peaks.map((_, i) => String(i + 1))} rows={peakRows(method, setPeak)} labelWidth={270} columnWidth={150} />
+          <PropertyGrid
+            columns={method.peaks.map((_, i) => String(i + 1))}
+            rows={peakRows(method, setPeak)}
+            labelWidth={270}
+            columnWidth={150}
+            selectedColumn={cur}
+            onSelectColumn={setSel}
+            onDeleteColumn={deletePeak}
+            columnTitle="Click to select this peak; Del deletes it"
+          />
         ) : (
-          <div className="placeholder">No peaks defined. Use Autofind Peaks or Shift+drag on the graph.</div>
+          <div className="placeholder">No peaks defined. Drag on the graph to add one, or use Autofind Peaks.</div>
         )
       }
       bottomFraction={0.4}

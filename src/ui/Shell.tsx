@@ -5,6 +5,7 @@ import {
   exportSliceCSV,
   openSample,
   pickFiles,
+  printReport,
   reprocessAll,
   resultsRows,
   saveMethod,
@@ -22,6 +23,8 @@ import {
   IconOpen,
   IconPan,
   IconPrint,
+  IconRedo,
+  IconUndo,
   IconProcedure,
   IconProfile,
   IconResult,
@@ -87,19 +90,25 @@ function useMenus(): { title: string; items: MenuItem[] }[] {
         { label: 'Close Experiment', disabled: !hasExp, action: () => st.selectedExpId && st.closeExperiment(st.selectedExpId) },
         { label: 'Close All Experiments', disabled: !st.experiments.length, action: () => st.experiments.forEach((x) => st.closeExperiment(x.experiment.id)) },
         { label: '', sep: true },
-        { label: 'Save Method…', disabled: !hasExp, action: () => saveMethod() },
+        { label: 'Save Method…', shortcut: 'Ctrl+S', disabled: !hasExp, action: () => saveMethod() },
         { label: 'Apply Method to Experiment…', disabled: !hasExp, action: () => pickFiles('.json') },
         { label: '', sep: true },
         { label: 'Export Peak Results (CSV)', disabled: !st.experiments.length, action: exportResultsCSV },
         { label: 'Export Slice Results (CSV)', disabled: !hasExp, action: () => exportSliceCSV() },
         { label: 'Export Processed Signals (CSV)', disabled: !hasExp, action: () => exportSignalsCSV() },
         { label: '', sep: true },
-        { label: 'Print Report…', shortcut: 'Ctrl+P', disabled: !hasExp, action: () => { st.openView('report'); setTimeout(() => window.print(), 300); } },
+        { label: 'Print Report…', shortcut: 'Ctrl+P', disabled: !hasExp, action: printReport },
       ],
     },
     {
       title: 'Edit',
       items: [
+        { label: 'Undo', shortcut: 'Ctrl+Z', disabled: !activeTab?.past?.length, action: () => activeTab && st.undo(activeTab.id) },
+        { label: 'Redo', shortcut: 'Ctrl+Y', disabled: !activeTab?.future?.length, action: () => activeTab && st.redo(activeTab.id) },
+        { label: '', sep: true },
+        { label: 'Apply Changes', shortcut: 'Ctrl+Enter', disabled: !activeTab?.draft, action: () => activeTab && st.apply(activeTab.id) },
+        { label: 'Discard Changes', disabled: !activeTab?.draft, action: () => activeTab && st.setDraft(activeTab.id, undefined) },
+        { label: '', sep: true },
         { label: 'Save Graph Image (PNG)', disabled: !activeTab, action: () => st.chartCommand('png') },
         { label: 'Copy Peak Results', disabled: !st.experiments.length, action: () => copyResults() },
       ],
@@ -143,8 +152,10 @@ function useMenus(): { title: string; items: MenuItem[] }[] {
     {
       title: 'Window',
       items: [
-        { label: 'Close Tab', disabled: !activeTab, action: () => activeTab && st.closeTab(activeTab.id) },
-        { label: 'Close All Tabs', disabled: !st.tabs.length, action: () => st.tabs.forEach((t) => st.closeTab(t.id)) },
+        { label: 'Close Tab', shortcut: 'Alt+W', disabled: !activeTab, action: () => activeTab && st.closeTabs([activeTab.id]) },
+        { label: 'Close All Tabs', disabled: !st.tabs.length, action: () => st.closeTabs(st.tabs.map((t) => t.id)) },
+        { label: 'Next Tab', shortcut: 'Alt+PgDn', disabled: st.tabs.length < 2, action: () => st.cycleTab(1) },
+        { label: 'Previous Tab', shortcut: 'Alt+PgUp', disabled: st.tabs.length < 2, action: () => st.cycleTab(-1) },
         ...(st.tabs.length ? [{ label: '', sep: true }] : []),
         ...st.tabs.map((t) => ({ label: tabTitle(t.view, t.expId), checked: t.id === st.activeTabId, action: () => st.activateTab(t.id) })),
       ],
@@ -152,7 +163,8 @@ function useMenus(): { title: string; items: MenuItem[] }[] {
     {
       title: 'Help',
       items: [
-        { label: 'About OpenMALS / User Guide', action: () => st.openView('about') },
+        { label: 'About OpenMALS / User Guide', shortcut: 'F1', action: () => st.openView('about') },
+        { label: 'Keyboard Shortcuts', action: () => st.openView('about') },
         { label: 'Source code on GitHub', action: () => window.open('https://github.com/gavinbrow/GPC_Reader', '_blank') },
       ],
     },
@@ -224,6 +236,7 @@ export function MenuBar() {
 export function MainToolbar() {
   const st = useStore();
   const hasExp = !!st.selectedExpId;
+  const activeTab = st.tabs.find((t) => t.id === st.activeTabId);
   const B = ({ icon, label, onClick, title, pressed, disabled }: { icon: ReactNode; label?: string; onClick: () => void; title: string; pressed?: boolean; disabled?: boolean }) => (
     <button className={'tb-btn' + (pressed ? ' pressed' : '')} onClick={onClick} title={title} disabled={disabled}>
       {icon}
@@ -233,8 +246,11 @@ export function MainToolbar() {
   return (
     <div className="toolbar">
       <B icon={<IconOpen />} onClick={() => pickFiles('.afe8')} title="Open experiment (.afe8)" />
-      <B icon={<IconSave />} onClick={() => saveMethod()} title="Save method (processing parameters)" disabled={!hasExp} />
-      <B icon={<IconPrint />} onClick={() => { st.openView('report'); setTimeout(() => window.print(), 300); }} title="Print report" disabled={!hasExp} />
+      <B icon={<IconSave />} onClick={() => saveMethod()} title="Save method: processing parameters (Ctrl+S)" disabled={!hasExp} />
+      <B icon={<IconPrint />} onClick={printReport} title="Print report (Ctrl+P)" disabled={!hasExp} />
+      <span className="tb-sep" />
+      <B icon={<IconUndo />} onClick={() => activeTab && st.undo(activeTab.id)} title="Undo (Ctrl+Z)" disabled={!activeTab?.past?.length} />
+      <B icon={<IconRedo />} onClick={() => activeTab && st.redo(activeTab.id)} title="Redo (Ctrl+Y)" disabled={!activeTab?.future?.length} />
       <span className="tb-sep" />
       <B icon={<IconTable />} label="Report" onClick={() => st.openView('report')} title="Open the experiment report" disabled={!hasExp} />
       <B icon={<IconRun />} label="Run" onClick={reprocessAll} title="Reprocess all experiments" />
@@ -263,7 +279,7 @@ const VIEW_ICON: Partial<Record<ViewKind, ReactNode>> = {
   fileContents: <IconTable />,
 };
 
-function TreeItem({ icon, label, onClick, active, depth, toggle, open, bold }: { icon?: ReactNode; label: string; onClick?: () => void; active?: boolean; depth: number; toggle?: () => void; open?: boolean; bold?: boolean }) {
+function TreeItem({ icon, label, onClick, active, depth, toggle, open, bold, onClose, closeTitle }: { icon?: ReactNode; label: string; onClick?: () => void; active?: boolean; depth: number; toggle?: () => void; open?: boolean; bold?: boolean; onClose?: () => void; closeTitle?: string }) {
   return (
     <div className={'tree-item' + (active ? ' active' : '')} style={{ paddingLeft: 4 + depth * 14 }} onClick={onClick ?? toggle} title={label}>
       <span className="tree-toggle" onClick={(e) => { if (toggle) { e.stopPropagation(); toggle(); } }}>
@@ -271,6 +287,18 @@ function TreeItem({ icon, label, onClick, active, depth, toggle, open, bold }: {
       </span>
       {icon}
       <span className={'tree-label' + (bold ? ' bold' : '')}>{label}</span>
+      {onClose && (
+        <button
+          className="tree-close"
+          title={closeTitle ?? 'Close'}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+        >
+          <IconClose size={10} />
+        </button>
+      )}
     </div>
   );
 }
@@ -303,7 +331,18 @@ function ExperimentsTree() {
           );
           return (
             <div key={k}>
-              <TreeItem depth={1} icon={<IconExperiment />} label={e.name} bold toggle={tg(k)} open={isOpen(k)} onClick={() => st.selectExperiment(e.id)} active={st.selectedExpId === e.id && !activeTab} />
+              <TreeItem
+                depth={1}
+                icon={<IconExperiment />}
+                label={e.name}
+                bold
+                toggle={tg(k)}
+                open={isOpen(k)}
+                onClick={() => st.selectExperiment(e.id)}
+                active={st.selectedExpId === e.id && !activeTab}
+                onClose={() => st.closeExperiment(e.id)}
+                closeTitle={`Close ${e.name}`}
+              />
               {isOpen(k) && (
                 <>
                   <TreeItem depth={2} icon={<IconGear />} label={`Configuration (${e.configurationName || 'experiment'})`} onClick={() => st.openView('configuration', e.id)} active={activeTab?.view === 'configuration' && activeTab.expId === e.id} />
@@ -384,8 +423,23 @@ export function Sidebar() {
       </div>
     );
   }
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const x0 = e.clientX;
+    const w0 = st.sidebarWidth;
+    document.body.classList.add('resizing-h');
+    const move = (ev: PointerEvent) => st.setSidebarWidth(w0 + ev.clientX - x0);
+    const up = () => {
+      document.body.classList.remove('resizing-h');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
   return (
-    <div className="sidebar">
+    <div className="sidebar" style={{ width: st.sidebarWidth }}>
+      <div className="sidebar-resizer" onPointerDown={startResize} onDoubleClick={() => st.setSidebarWidth(270)} title="Drag to resize; double-click to reset" />
       <div className="sidebar-head">
         <span>{st.nav}</span>
         <button className="icon-btn" onClick={st.toggleSidebar} title="Hide pane">«</button>
@@ -413,26 +467,135 @@ export function Sidebar() {
 
 export function TabStrip() {
   const st = useStore();
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
+  const [list, setList] = useState(false);
+  const multi = st.experiments.length > 1;
+
+  // Keep the active tab visible.
+  useEffect(() => {
+    const el = stripRef.current?.querySelector<HTMLElement>('.doc-tab.active');
+    el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [st.activeTabId, st.tabs.length]);
+  useEffect(() => {
+    if (!menu && !list) return;
+    const close = () => {
+      setMenu(null);
+      setList(false);
+    };
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [menu, list]);
+  // Wheel scrolls the strip sideways.
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  if (!st.tabs.length) return null;
+  const title = (t: (typeof st.tabs)[number]) => (multi || !t.expId ? tabTitle(t.view, t.expId) : VIEW_TITLES[t.view]);
+  const menuItem = (label: string, fn: () => void, disabled = false) => (
+    <button
+      className="menu-item"
+      disabled={disabled}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={() => {
+        setMenu(null);
+        fn();
+      }}
+    >
+      <span className="menu-check" />
+      <span className="menu-label">{label}</span>
+    </button>
+  );
+  const ids = st.tabs.map((t) => t.id);
   return (
-    <div className="tabstrip">
-      {st.tabs.map((t) => (
-        <div key={t.id} className={'doc-tab' + (t.id === st.activeTabId ? ' active' : '')} onClick={() => st.activateTab(t.id)} onAuxClick={(e) => e.button === 1 && st.closeTab(t.id)}>
-          <span>
-            {tabTitle(t.view, t.expId)}
-            {t.draft ? ' *' : ''}
-          </span>
-          <button
-            className="tab-close"
-            onClick={(e) => {
-              e.stopPropagation();
-              st.closeTab(t.id);
+    <div className="tabbar">
+      <div className="tabstrip" ref={stripRef}>
+        {st.tabs.map((t) => (
+          <div
+            key={t.id}
+            className={'doc-tab' + (t.id === st.activeTabId ? ' active' : '')}
+            onMouseDown={(e) => e.button === 0 && st.activateTab(t.id)}
+            onAuxClick={(e) => e.button === 1 && st.closeTabs([t.id])}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ x: e.clientX, y: e.clientY, tabId: t.id });
             }}
-            title="Close"
+            title={tabTitle(t.view, t.expId) + (t.draft ? ' (changes not applied)' : '')}
           >
-            <IconClose size={10} />
+            <span className="doc-tab-label">
+              {title(t)}
+              {t.draft ? ' *' : ''}
+            </span>
+            <button
+              className="tab-close"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                st.closeTabs([t.id]);
+              }}
+              title="Close (middle-click)"
+            >
+              <IconClose size={10} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        className="tab-list-btn"
+        title="All open views"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={() => setList((v) => !v)}
+      >
+        ▾ <span className="tab-count">{st.tabs.length}</span>
+      </button>
+      {list && (
+        <div className="menu-drop tab-list" onMouseDown={(e) => e.stopPropagation()}>
+          {st.tabs.map((t) => (
+            <button
+              key={t.id}
+              className="menu-item"
+              onClick={() => {
+                setList(false);
+                st.activateTab(t.id);
+              }}
+            >
+              <span className="menu-check">{t.id === st.activeTabId ? '✓' : ''}</span>
+              <span className="menu-label">
+                {tabTitle(t.view, t.expId)}
+                {t.draft ? ' *' : ''}
+              </span>
+            </button>
+          ))}
+          <div className="menu-sep" />
+          <button
+            className="menu-item"
+            onClick={() => {
+              setList(false);
+              st.closeTabs(ids);
+            }}
+          >
+            <span className="menu-check" />
+            <span className="menu-label">Close All</span>
           </button>
         </div>
-      ))}
+      )}
+      {menu && (
+        <div className="menu-drop context-menu" style={{ position: 'fixed', left: menu.x, top: menu.y }}>
+          {menuItem('Close', () => st.closeTabs([menu.tabId]))}
+          {menuItem('Close Others', () => st.closeTabs(ids.filter((x) => x !== menu.tabId)), ids.length < 2)}
+          {menuItem('Close Tabs to the Right', () => st.closeTabs(ids.slice(ids.indexOf(menu.tabId) + 1)), ids.indexOf(menu.tabId) === ids.length - 1)}
+          {menuItem('Close All', () => st.closeTabs(ids))}
+        </div>
+      )}
     </div>
   );
 }

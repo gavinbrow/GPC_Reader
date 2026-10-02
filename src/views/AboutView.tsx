@@ -2,6 +2,24 @@ import type { Tab } from '../store';
 import { ViewFrame } from '../ui/ViewFrame';
 import { openSample, pickFiles } from '../actions';
 
+const SHORTCUTS: [string, string][] = [
+  ['Ctrl+O', 'Open experiment'],
+  ['Ctrl+S', 'Save method'],
+  ['Ctrl+P', 'Print report'],
+  ['Ctrl+Z / Ctrl+Y', 'Undo / redo the last edit in the current view'],
+  ['Ctrl+Enter', 'Apply the changes in the current view'],
+  ['Alt+W', 'Close the current tab (middle-click also closes a tab)'],
+  ['Alt+PgDn / Alt+PgUp', 'Next / previous tab'],
+  ['F1', 'This guide'],
+  ['D / Z / P / A', 'Peaks & Baselines: draw mode, zoom mode, pan mode, autoscale'],
+  ['Esc', 'Peaks & Baselines: back to draw mode'],
+  ['Delete', 'Peaks: delete the selected peak'],
+  ['← / →', 'Peaks: select the previous / next peak. Molar Mass: previous / next slice (Shift = 10 slices)'],
+  ['↑ / ↓', 'Baselines: previous / next signal. Molar Mass: previous / next peak'],
+  ['Home / End', 'Molar Mass: first / last slice of the peak'],
+  ['Double-click graph', 'Autoscale'],
+];
+
 export function AboutView({ tab }: { tab: Tab }) {
   return (
     <ViewFrame
@@ -23,21 +41,42 @@ export function AboutView({ tab }: { tab: Tab }) {
           <ol>
             <li><b>Basic Collection</b> – raw detector signals as collected (LS detectors, UV, dRI, viscometer, HPLC pressure/flow).</li>
             <li><b>Despiking</b> – removes isolated spikes (Hampel filter; Low / Normal / High).</li>
-            <li><b>Baselines</b> – one baseline per signal; drag end points, Snap-Y averages the data at the end points, Autofind places them automatically, Set All copies the source range.</li>
+            <li><b>Baselines</b> – one signal at a time (pick it in the list or with ↑/↓); drag on the graph to set its baseline range, drag the end points to adjust. Snap-Y averages the data at the end points, Autofind places them automatically, Set All copies the range to every signal.</li>
             <li><b>Alignment</b> – interdetector volumes from a narrow standard so every detector sees the same slice of sample.</li>
             <li><b>Band Broadening</b> – Gaussian (instrumental) + exponential (mixing) terms that broaden the upstream detectors to match the concentration detector.</li>
             <li><b>Normalization</b> – relates each LS detector to the 90° detector using an isotropic scatterer (radius correction available).</li>
-            <li><b>Peaks</b> – peak limits and sample parameters (dn/dc, UV extinction, A2, injected mass, LS model and fit degree).</li>
-            <li><b>Molar Mass &amp; Radius from LS</b> – per-slice Zimm / Debye / Berry fit; inspect any slice's Debye plot and enable/disable detectors.</li>
+            <li><b>Peaks</b> – drag on the graph to add a peak; drag its edges to adjust. Click a peak (or its number in the table) to select it and press Delete to remove it. Each peak has its own dn/dc, UV extinction, A2, injected mass, LS model and fit degree.</li>
+            <li><b>Molar Mass &amp; Radius from LS</b> – per-slice Zimm / Debye / Berry fit. Scan the slices with ←/→ and switch peaks with ↑/↓ or by clicking a peak; enable or disable detectors.</li>
             <li><b>Results Fitting</b> – polynomial / exponential fits of molar mass or radius vs. time to smooth the distributions.</li>
             <li><b>Distribution Analysis</b> – cumulative and differential weight fractions with user ranges.</li>
             <li><b>Results</b> – report, peak results, peak statistics (column performance), slice table, conformation and Mark–Houwink plots; <b>EASI Graph / Table</b> compare experiments.</li>
           </ol>
           <p>
-            Edits in a procedure are drafts until you press <b>Apply</b> or <b>OK</b> (Cancel discards them), as in ASTRA. Graphs: drag to zoom,
-            double-click to autoscale, mouse wheel zooms time, Shift+drag defines a new peak or baseline range, legend check boxes show/hide signals.
-            Save the processing parameters with <i>File → Save Method</i> and apply them to other experiments with <i>File → Apply Method</i>.
+            Edits in a procedure are drafts until you press <b>Apply</b> or <b>OK</b> (Cancel discards them), as in ASTRA; every edit can be undone.
+            Graphs: drag to zoom (in the Peaks and Baselines views choose <b>Zoom</b> first, since a plain drag draws a range there), double-click
+            to autoscale, mouse wheel zooms time (Ctrl+wheel zooms the y axis), right-click for image and data export, legend check boxes show or
+            hide signals. Save the processing parameters with <i>File → Save Method</i> and apply them to other experiments with <i>File → Apply Method</i>.
+            Drag the edge of the experiments pane to resize it.
           </p>
+
+          <h2 id="shortcuts">Keyboard shortcuts</h2>
+          <table className="shortcut-table">
+            <tbody>
+              {SHORTCUTS.map(([k, d]) => (
+                <tr key={k}>
+                  <td>
+                    {k.split(' / ').map((x, i) => (
+                      <span key={x}>
+                        {i > 0 && ' / '}
+                        <kbd>{x}</kbd>
+                      </span>
+                    ))}
+                  </td>
+                  <td>{d}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
           <h2>Theory</h2>
           <p>

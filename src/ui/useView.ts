@@ -19,7 +19,7 @@ export interface ViewContext {
 /** Everything a procedure view needs; must only be used for tabs bound to an experiment. */
 export function useViewContext(tab: Tab): ViewContext | null {
   const entry = useStore((s) => s.experiments.find((x) => x.experiment.id === tab.expId));
-  const setDraft = useStore((s) => s.setDraft);
+  const editDraft = useStore((s) => s.editDraft);
   const method = tab.draft ?? entry?.method;
   const processed = useMemo(() => (entry && method ? processedFor(entry.experiment, method) : null), [entry, method]);
   const update = useCallback(
@@ -27,9 +27,9 @@ export function useViewContext(tab: Tab): ViewContext | null {
       const cur = useStore.getState().tabs.find((t) => t.id === tab.id);
       const e = useStore.getState().experiments.find((x) => x.experiment.id === tab.expId);
       if (!cur || !e) return;
-      setDraft(tab.id, fn(cur.draft ?? e.method));
+      editDraft(tab.id, fn(cur.draft ?? e.method));
     },
-    [tab.id, tab.expId, setDraft],
+    [tab.id, tab.expId, editDraft],
   );
   if (!entry || !method || !processed) return null;
   return { tab, experiment: entry.experiment, method, committed: entry.method, processed, dirty: !!tab.draft, update };

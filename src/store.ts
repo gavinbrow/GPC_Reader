@@ -76,6 +76,8 @@ export const EDITING_VIEWS = new Set<ViewKind>([
 export interface ExpEntry {
   experiment: Experiment;
   method: Method;
+  /** The method was changed since the file was opened (not saved to a method file). */
+  modified?: boolean;
 }
 
 export interface Tab {
@@ -84,6 +86,28 @@ export interface Tab {
   view: ViewKind;
   /** Uncommitted edits made in this view. */
   draft?: Method;
+  /** Undo / redo stacks of this view's edits (methods before / after each edit). */
+  past?: Method[];
+  future?: Method[];
+}
+
+const UNDO_LIMIT = 100;
+
+/** Small persisted UI preferences (best effort: storage can be unavailable). */
+function loadPref<T>(key: string, fallback: T): T {
+  try {
+    const v = localStorage.getItem(`openmals.${key}`);
+    return v === null ? fallback : (JSON.parse(v) as T);
+  } catch {
+    return fallback;
+  }
+}
+function savePref(key: string, v: unknown) {
+  try {
+    localStorage.setItem(`openmals.${key}`, JSON.stringify(v));
+  } catch {
+    /* ignore */
+  }
 }
 
 export type NavPane = 'Experiments' | 'Sequences' | 'Profiles' | 'Instruments';
@@ -96,6 +120,7 @@ interface State {
   selectedExpId?: string;
   nav: NavPane;
   sidebarCollapsed: boolean;
+  sidebarWidth: number;
   chartMode: 'zoom' | 'pan';
   chartCmd: { seq: number; cmd: ChartCommand };
   status: string;
@@ -107,13 +132,22 @@ interface State {
   selectExperiment(expId: string): void;
   openView(view: ViewKind, expId?: string): void;
   closeTab(tabId: string): void;
+  /** Close several tabs; asks for confirmation when any of them has unapplied changes. */
+  closeTabs(tabIds: string[]): void;
   activateTab(tabId: string): void;
+  /** Activate the next (+1) or previous (-1) tab. */
+  cycleTab(dir: number): void;
   setDraft(tabId: string, m: Method | undefined): void;
+  /** Record an edit (undoable) and make it the tab's draft. */
+  editDraft(tabId: string, m: Method): void;
+  undo(tabId: string): void;
+  redo(tabId: string): void;
   /** Commit a tab's draft to the experiment. */
   apply(tabId: string): void;
   setMethod(expId: string, m: Method): void;
   setNav(n: NavPane): void;
   toggleSidebar(): void;
+  setSidebarWidth(w: number): void;
   setChartMode(m: 'zoom' | 'pan'): void;
   chartCommand(cmd: ChartCommand): void;
   setStatus(s: string): void;
@@ -127,7 +161,8 @@ export const useStore = create<State>((set, get) => ({
   experiments: [],
   tabs: [],
   nav: 'Experiments',
-  sidebarCollapsed: false,
+  sidebarCollapsed: loadPref('sidebarCollapsed', false),
+  sidebarWidth: loadPref('sidebarWidth', 270),
   chartMode: 'zoom',
   chartCmd: { seq: 0, cmd: 'reset' },
   status: 'Ready',
@@ -139,6 +174,10 @@ export const useStore = create<State>((set, get) => ({
     get().openView('basicCollection', e.id);
   },
   closeExperiment(expId) {
+    const s0 = get();
+    const entry = s0.experiments.find((x) => x.experiment.id === expId);
+    const dirty = s0.tabs.some((t) => t.expId === expId && t.draft);
+    if (entry && dirty && !confirm(`${entry.experiment.name} has views with changes that were not applied. Close it anyway?`)) return;
     set((s) => {
       const tabs = s.tabs.filter((t) => t.expId !== expId);
       const experiments = s.experiments.filter((x) => x.experiment.id !== expId);
@@ -175,24 +214,77 @@ export const useStore = create<State>((set, get) => ({
       return { tabs, activeTabId: active };
     });
   },
+  closeTabs(tabIds) {
+    const ids = new Set(tabIds);
+    const dirty = get().tabs.filter((t) => ids.has(t.id) && t.draft).length;
+    if (dirty && !confirm(`${dirty} view${dirty > 1 ? 's have' : ' has'} changes that were not applied. Close and discard them?`)) return;
+    set((s) => {
+      const tabs = s.tabs.filter((t) => !ids.has(t.id));
+      let active = s.activeTabId;
+      if (active && ids.has(active)) {
+        const idx = s.tabs.findIndex((t) => t.id === active);
+        const after = s.tabs.slice(idx).find((t) => !ids.has(t.id));
+        active = (after ?? tabs[tabs.length - 1])?.id;
+      }
+      return { tabs, activeTabId: active };
+    });
+  },
   activateTab(tabId) {
     const t = get().tabs.find((x) => x.id === tabId);
     set({ activeTabId: tabId, selectedExpId: t?.expId ?? get().selectedExpId });
   },
+  cycleTab(dir) {
+    const { tabs, activeTabId } = get();
+    if (!tabs.length) return;
+    const i = tabs.findIndex((t) => t.id === activeTabId);
+    get().activateTab(tabs[(i + dir + tabs.length) % tabs.length].id);
+  },
   setDraft(tabId, m) {
-    set((s) => ({ tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, draft: m } : t)) }));
+    set((s) => ({ tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, draft: m, ...(m ? {} : { past: undefined, future: undefined }) } : t)) }));
+  },
+  editDraft(tabId, m) {
+    set((s) => ({
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId) return t;
+        const cur = t.draft ?? s.experiments.find((x) => x.experiment.id === t.expId)?.method;
+        if (!cur || cur === m) return t;
+        return { ...t, draft: m, past: [...(t.past ?? []), cur].slice(-UNDO_LIMIT), future: [] };
+      }),
+    }));
+  },
+  undo(tabId) {
+    set((s) => ({
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId || !t.past?.length) return t;
+        const committed = s.experiments.find((x) => x.experiment.id === t.expId)?.method;
+        const cur = t.draft ?? committed;
+        const prev = t.past[t.past.length - 1];
+        return { ...t, draft: prev === committed ? undefined : prev, past: t.past.slice(0, -1), future: cur ? [...(t.future ?? []), cur] : t.future };
+      }),
+    }));
+  },
+  redo(tabId) {
+    set((s) => ({
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId || !t.future?.length) return t;
+        const committed = s.experiments.find((x) => x.experiment.id === t.expId)?.method;
+        const cur = t.draft ?? committed;
+        const next = t.future[t.future.length - 1];
+        return { ...t, draft: next === committed ? undefined : next, future: t.future.slice(0, -1), past: cur ? [...(t.past ?? []), cur] : t.past };
+      }),
+    }));
   },
   apply(tabId) {
     const t = get().tabs.find((x) => x.id === tabId);
     if (!t?.draft || !t.expId) return;
     get().setMethod(t.expId, t.draft);
-    set((s) => ({ tabs: s.tabs.map((x) => (x.id === tabId ? { ...x, draft: undefined } : x)) }));
+    set((s) => ({ tabs: s.tabs.map((x) => (x.id === tabId ? { ...x, draft: undefined, past: undefined, future: undefined } : x)), status: 'Changes applied' }));
   },
   setMethod(expId, m) {
     set((s) => ({
-      experiments: s.experiments.map((x) => (x.experiment.id === expId ? { ...x, method: m } : x)),
+      experiments: s.experiments.map((x) => (x.experiment.id === expId ? { ...x, method: m, modified: x.modified || x.method !== m } : x)),
       // Drafts of other views of this experiment are based on the old method: drop them.
-      tabs: s.tabs.map((t) => (t.expId === expId && t.draft && t.draft !== m ? { ...t, draft: undefined } : t)),
+      tabs: s.tabs.map((t) => (t.expId === expId && t.draft && t.draft !== m ? { ...t, draft: undefined, past: undefined, future: undefined } : t)),
       status: 'Processing complete',
     }));
   },
@@ -201,6 +293,12 @@ export const useStore = create<State>((set, get) => ({
   },
   toggleSidebar() {
     set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed }));
+    savePref('sidebarCollapsed', get().sidebarCollapsed);
+  },
+  setSidebarWidth(w) {
+    const width = Math.round(Math.min(Math.max(w, 180), Math.max(220, window.innerWidth * 0.6)));
+    set({ sidebarWidth: width });
+    savePref('sidebarWidth', width);
   },
   setChartMode(m) {
     set({ chartMode: m });

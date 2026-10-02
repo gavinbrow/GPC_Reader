@@ -2,11 +2,40 @@ import { createContext, forwardRef, useContext, useEffect, useImperativeHandle, 
 import { Chart } from '../chart/Chart';
 import type { ChartHandle, ChartProps } from '../chart/types';
 import { EDITING_VIEWS, useStore, type Tab } from '../store';
-import { IconClose, IconInfo, IconWarning } from './icons';
+import { IconClose, IconFit, IconInfo, IconRedo, IconUndo, IconPan, IconRange, IconWarning, IconZoomOut, IconZoomRect } from './icons';
 import { download, safeFileName, toCSV } from './format';
 
 /** Whether the surrounding tab is the active one (charts only obey toolbar commands then). */
 export const ActiveTabContext = createContext<{ active: boolean; title: string }>({ active: false, title: '' });
+
+/** True when a key press goes to a text field / select rather than to the view. */
+export function isTypingTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
+/**
+ * Keyboard shortcuts of a view: the handler runs only while the view's tab is
+ * active and the user is not typing in a field. Return true to mark the key
+ * as handled (its default action is then suppressed).
+ */
+export function useViewKeys(handler: (e: KeyboardEvent) => boolean | void) {
+  const { active } = useContext(ActiveTabContext);
+  const ref = useRef(handler);
+  ref.current = handler;
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || isTypingTarget(e.target)) return;
+      if (document.querySelector('.modal-backdrop')) return;
+      if (ref.current(e)) e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active]);
+}
 
 interface FrameProps {
   tab: Tab;
@@ -29,6 +58,8 @@ interface FrameProps {
 export function ViewFrame({ tab, toolbar, messages, main, bottom, bottomFraction = 0.36, onOk, onCancel }: FrameProps) {
   const apply = useStore((s) => s.apply);
   const setDraft = useStore((s) => s.setDraft);
+  const undo = useStore((s) => s.undo);
+  const redo = useStore((s) => s.redo);
   const closeTab = useStore((s) => s.closeTab);
   const [frac, setFrac] = useState(bottomFraction);
   const [dismissed, setDismissed] = useState<string>('');
@@ -103,10 +134,16 @@ export function ViewFrame({ tab, toolbar, messages, main, bottom, bottomFraction
           >
             Cancel
           </button>
-          <button disabled={!tab.draft} onClick={() => apply(tab.id)}>
+          <button disabled={!tab.draft} onClick={() => apply(tab.id)} title="Apply the changes and keep this view open (Ctrl+Enter)">
             Apply
           </button>
-          {tab.draft && <span className="view-dirty">Modified — press Apply or OK to keep the changes</span>}
+          <button className="vb-icon" disabled={!tab.past?.length} onClick={() => undo(tab.id)} title="Undo (Ctrl+Z)">
+            <IconUndo />
+          </button>
+          <button className="vb-icon" disabled={!tab.future?.length} onClick={() => redo(tab.id)} title="Redo (Ctrl+Y)">
+            <IconRedo />
+          </button>
+          {tab.draft && <span className="view-dirty">Modified: press Apply or OK to keep the changes</span>}
         </div>
       )}
     </div>
@@ -229,6 +266,51 @@ export function ToolSelect<T extends string | number>({ value, options, onChange
         );
       })}
     </select>
+  );
+}
+
+export type GraphMode = 'draw' | 'zoom' | 'pan';
+
+/**
+ * Mode buttons for graphs where a plain drag defines a range (peaks,
+ * baselines): Draw is the default, Zoom and Pan must be chosen explicitly.
+ * Keys: D draw, Z zoom, P pan, A autoscale.
+ */
+export function GraphModeTools({ mode, setMode, drawLabel, drawTitle, chart }: { mode: GraphMode; setMode: (m: GraphMode) => void; drawLabel: string; drawTitle: string; chart: React.RefObject<ChartHandle | null> }) {
+  useViewKeys((e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === 'd') setMode('draw');
+    else if (k === 'z') setMode('zoom');
+    else if (k === 'p') setMode('pan');
+    else if (k === 'a') chart.current?.resetZoom();
+    else if (k === 'escape' && mode !== 'draw') setMode('draw');
+    else return false;
+    return true;
+  });
+  return (
+    <>
+      <ToolButton icon={<IconRange />} pressed={mode === 'draw'} onClick={() => setMode('draw')} title={`${drawTitle} (D)`}>
+        {drawLabel}
+      </ToolButton>
+      <ToolButton icon={<IconZoomRect />} pressed={mode === 'zoom'} onClick={() => setMode(mode === 'zoom' ? 'draw' : 'zoom')} title="Zoom: drag a rectangle on the graph to zoom in (Z)">
+        Zoom
+      </ToolButton>
+      <ToolButton icon={<IconPan />} pressed={mode === 'pan'} onClick={() => setMode(mode === 'pan' ? 'draw' : 'pan')} title="Pan: drag the graph to move it (P)" />
+      <ToolButton icon={<IconZoomOut />} onClick={() => chart.current?.zoomBy(1 / 1.5)} title="Zoom out" />
+      <ToolButton icon={<IconFit />} onClick={() => chart.current?.resetZoom()} title="Autoscale: show all data (A, or double-click the graph)">
+        Autoscale
+      </ToolButton>
+    </>
+  );
+}
+
+/** Small grey hint text at the end of a tool strip. */
+export function ToolHint({ children }: { children: ReactNode }) {
+  return (
+    <span className="tool-hint" title={typeof children === 'string' ? children : undefined}>
+      {children}
+    </span>
   );
 }
 

@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Tab } from '../store';
 import { newId, type DistributionRange, type Method } from '../analysis/method';
 import { rangeFractions, type DistributionCurve } from '../analysis/distribution';
 import type { PeakResult } from '../analysis/pipeline';
-import type { ChartRegion, ChartSeries } from '../chart/types';
-import { ChartPane, ToolButton, ToolLabel, ToolSelect, ToolSep, ViewFrame } from '../ui/ViewFrame';
+import type { ChartHandle, ChartRegion, ChartSeries } from '../chart/types';
+import { ChartPane, GraphModeTools, ToolButton, ToolLabel, ToolSelect, ToolSep, ViewFrame, useViewKeys, type GraphMode } from '../ui/ViewFrame';
 import { PropertyGrid, type PGCell, type PGRow } from '../ui/PropertyGrid';
 import { useViewContext } from '../ui/useView';
-import { IconMinus, IconPlus } from '../ui/icons';
+import { IconPlus, IconTrash } from '../ui/icons';
 import { num } from '../ui/format';
 import { EmptyView, PeakSelect, peakDistribution, windowed } from './ResultsFittingView';
 
@@ -70,6 +70,15 @@ export function DistributionView({ tab }: { tab: Tab }) {
   const [sel, setSel] = useState(0);
   const [vis, setVis] = useState<Record<string, boolean>>({});
   const [drag, setDrag] = useState<{ id: string; x1: number; x2: number } | null>(null);
+  const [mode, setMode] = useState<GraphMode>('zoom');
+  const chart = useRef<ChartHandle>(null);
+  const deleteRef = useRef<() => void>(() => {});
+  useViewKeys((ev) => {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (ev.key === 'Delete' || ev.key === 'Backspace') deleteRef.current();
+    else return false;
+    return true;
+  });
   if (!ctx) return null;
   const { method, processed, update } = ctx;
   const pr = processed.peaks[Math.min(peakIdx, processed.peaks.length - 1)];
@@ -96,16 +105,19 @@ export function DistributionView({ tab }: { tab: Tab }) {
         return n;
       }),
     );
-  const addRange = () => {
+  const addRange = (start?: number, stop?: number) => {
     if (!curve) return;
-    setRanges((rs) => [...rs, { id: newId('rg'), name: `Range ${rs.length + 1}`, start: quantileX(curve, 0.05), stop: quantileX(curve, 0.95) }]);
+    const a = start ?? quantileX(curve, 0.05);
+    const b = stop ?? quantileX(curve, 0.95);
+    setRanges((rs) => [...rs, { id: newId('rg'), name: `Range ${rs.length + 1}`, start: Math.min(a, b), stop: Math.max(a, b) }]);
     setSel(ranges.length);
   };
-  const deleteRange = () => {
-    if (selIdx < 0) return;
-    setRanges((rs) => rs.filter((_, i) => i !== selIdx));
-    setSel(Math.max(0, selIdx - 1));
+  const deleteRange = (i = selIdx) => {
+    if (i < 0 || i >= ranges.length) return;
+    setRanges((rs) => rs.filter((_, k) => k !== i));
+    setSel(Math.max(0, i - 1));
   };
+  deleteRef.current = () => deleteRange();
 
   const unit = isMass ? 'g/mol' : 'nm';
   const series: ChartSeries[] = [];
@@ -171,10 +183,12 @@ export function DistributionView({ tab }: { tab: Tab }) {
           <ToolSep />
           <PeakSelect peaks={processed.peaks} value={pr.index} onChange={(i) => setPeakIdx(i)} />
           <ToolSep />
-          <ToolButton icon={<IconPlus />} onClick={addRange} disabled={!curve} title="Add a range to the selected peak">
+          <GraphModeTools mode={mode} setMode={setMode} drawLabel="Draw Range" drawTitle="Drag on the graph to add a range" chart={chart} />
+          <ToolSep />
+          <ToolButton icon={<IconPlus />} onClick={() => addRange()} disabled={!curve} title="Add a range covering 5–95% of the distribution">
             Add Range
           </ToolButton>
-          <ToolButton icon={<IconMinus />} onClick={deleteRange} disabled={selIdx < 0} title="Delete the selected range">
+          <ToolButton icon={<IconTrash />} onClick={() => deleteRange()} disabled={selIdx < 0} title="Delete the selected range (Del)">
             Delete Range
           </ToolButton>
           {ranges.length > 0 && (
@@ -187,7 +201,10 @@ export function DistributionView({ tab }: { tab: Tab }) {
       }
       main={
         <ChartPane
+          ref={chart}
           title="Distribution Analysis"
+          mode={mode}
+          onCreateRegion={(x1, x2) => addRange(x1, x2)}
           series={series}
           legend="top"
           regions={regions}
@@ -210,7 +227,22 @@ export function DistributionView({ tab }: { tab: Tab }) {
           }}
         />
       }
-      bottom={<PropertyGrid columns={ranges.map((_, i) => String(i + 1))} rows={rows} labelWidth={200} columnWidth={170} />}
+      bottom={
+        ranges.length ? (
+          <PropertyGrid
+            columns={ranges.map((_, i) => String(i + 1))}
+            rows={rows}
+            labelWidth={200}
+            columnWidth={170}
+            selectedColumn={selIdx}
+            onSelectColumn={setSel}
+            onDeleteColumn={deleteRange}
+            columnTitle="Click to select this range; Del deletes it"
+          />
+        ) : (
+          <div className="placeholder">No ranges. Choose Draw Range and drag on the graph, or use Add Range.</div>
+        )
+      }
       bottomFraction={0.34}
     />
   );

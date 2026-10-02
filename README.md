@@ -14,14 +14,14 @@ no installation: files are read and processed locally and never leave your compu
 | --------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Basic Collection                  | Every collected signal: LS detectors, UV channels, dRI, viscometer, forward monitor and HPLC pressure/flow. Legend check boxes and independent axes, as in ASTRA. |
 | Despiking                         | Hampel spike filter with Low / Normal / High levels.                                             |
-| Baselines                         | Per-signal baselines. Drag the end points in the graph, use Snap-Y or Manual style, Autofind, Set All, or Shift+drag a new range. |
+| Baselines                         | Per-signal baselines, one signal on screen at a time (switch with the list or ↑/↓). Drag on the graph to set the range, drag the end points, use Snap-Y or Manual style, Autofind or Set All. |
 | Alignment                         | Interdetector volumes measured from a narrow standard, or entered by hand.                      |
 | Band Broadening                   | Fits a Gaussian (instrumental) and exponential (mixing) term per instrument against the RI peak. |
 | Normalization                     | Detector normalization coefficients from an isotropic scatterer, with optional radius correction. |
-| Peaks                             | Peak limits by dragging or Autofind. Per peak: dn/dc, UV extinction, A2, injected mass, LS model and fit degree. |
-| Molar Mass & Radius from LS       | Per-slice Zimm / Debye / Berry fits of degree 1 to 3. Live Debye plot, slice cursor, enable or disable detectors. |
+| Peaks                             | Drag on the graph to add a peak, drag its edges to adjust, or use Autofind. Click a peak or its number to select it; Delete removes it. Per peak: dn/dc, UV extinction, A2, injected mass, LS model and fit degree. |
+| Molar Mass & Radius from LS       | Per-slice Zimm / Debye / Berry fits of degree 1 to 3. Live Debye plot; scan slices with ←/→ and switch peaks with ↑/↓ or a click. Enable or disable detectors. |
 | Results Fitting                   | Polynomial or exponential fits of molar mass or rms radius against time.                        |
-| Distribution Analysis             | Cumulative and differential weight fractions on linear or log axes, with ranges.                |
+| Distribution Analysis             | Cumulative and differential weight fractions on linear or log axes, with ranges drawn on the graph. |
 | Viscometry                        | Intrinsic viscosity per slice (dilute or Solomon–Ciuta), hydrodynamic radius and the Mark–Houwink plot. |
 | Results                           | Printable report and peak results with uncertainties. Also: peak statistics (plates, asymmetry, tailing), slice table, molar mass vs time, conformation plot, the results ASTRA stored in the file, the experiment log and the file contents. |
 | EASI Graph / EASI Table           | Overlay and tabulate several experiments.                                                       |
@@ -60,13 +60,16 @@ Pages on every push to `main`. To turn it on, go to *Settings → Pages → Sour
 The screen is laid out like ASTRA:
 
 * **Experiments tree** (left): Configuration, Procedures and Results for every open experiment, plus EASI Graph / EASI Table at the top.
-* **Document tabs**: each procedure has a graph, a property grid and **OK / Cancel / Apply**. Edits are drafts until they are applied.
+  Drag its right edge to make it wider or narrower.
+* **Document tabs**: each procedure has a graph, a property grid and **OK / Cancel / Apply**. Edits are drafts until they are applied,
+  and every edit can be undone (Ctrl+Z / Ctrl+Y). Right-click a tab to close others; the ▾ button lists every open view.
 * **Graphs**:
-  * Drag to zoom, double-click to autoscale, wheel to zoom the time axis.
-  * Shift+drag defines a new peak or baseline range.
+  * Drag to zoom, double-click to autoscale, wheel to zoom the time axis (Ctrl+wheel for the y axis).
+  * In Peaks, Baselines and Distribution a plain drag draws a range; pick **Zoom** or **Pan** in the view's tool strip to navigate.
   * Click a legend box to show or hide a signal.
   * Right-click to save an image or export the data.
-* **Toolbar**: zoom/pan mode, zoom in/out, autoscale, save image, report, run.
+* **Toolbar**: undo/redo, zoom/pan mode, zoom in/out, autoscale, save image, report, run.
+* **Keyboard**: see *Help → Keyboard Shortcuts* (F1).
 
 A typical calibration workflow on a narrow standard such as BSA or PS:
 1. Check the Baselines.

@@ -497,13 +497,13 @@ export function drawChart(
       ctx.globalAlpha = 1;
     } else {
       const g = ctx.createLinearGradient(0, plotT, 0, plotB);
-      g.addColorStop(0, r.selected ? '#b4b4b4' : '#c9c9c9');
-      g.addColorStop(1, '#ffffff');
+      g.addColorStop(0, r.selected ? '#8fb3e3' : '#c9c9c9');
+      g.addColorStop(1, r.selected ? '#eef4fc' : '#ffffff');
       ctx.fillStyle = g;
       ctx.fillRect(x0, plotT, x1 - x0, plotH);
     }
-    ctx.strokeStyle = r.selected ? '#6a6a6a' : '#8c8c8c';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = r.selected ? '#1565c0' : '#8c8c8c';
+    ctx.lineWidth = r.selected ? 1.5 : 1;
     ctx.beginPath();
     for (const px of [a, b]) {
       const xp = Math.round(px) + 0.5;
@@ -512,8 +512,8 @@ export function drawChart(
     }
     ctx.stroke();
     if (r.label) {
-      ctx.fillStyle = '#333';
-      ctx.font = FONT_REGION;
+      ctx.fillStyle = r.selected ? '#0d47a1' : '#333';
+      ctx.font = r.selected ? `bold ${FONT_REGION}` : FONT_REGION;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const mid = Math.min(Math.max((x0 + x1) / 2, plotL + 20), plotR - 20);
