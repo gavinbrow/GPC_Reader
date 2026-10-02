@@ -950,3 +950,9 @@ button.link {
     break-inside: avoid;
   }
 }
+
+.context-menu {
+  position: absolute;
+  z-index: 30;
+  min-width: 200px;
+}

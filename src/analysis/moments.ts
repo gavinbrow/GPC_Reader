@@ -44,6 +44,22 @@ export interface Moments {
 
 const nan: Value = { v: NaN, e: NaN };
 
+/**
+ * Log-log slopes (Mark–Houwink exponent, conformation slope) are only
+ * meaningful when the molar masses span a real range; for narrow standards
+ * the fit would be dominated by noise, so it is not reported.
+ */
+export const MIN_LOG_M_SPAN = 0.3;
+function spans(logM: number[]): boolean {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const v of logM) {
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  return hi - lo >= MIN_LOG_M_SPAN;
+}
+
 interface MomentInput {
   t: Float64Array;
   c: Float64Array;
@@ -256,7 +272,7 @@ export function computeMoments(inp: MomentInput): Moments {
           ys.push(Math.log10(inp.eta[i]));
           ws.push(c[i]);
         }
-      const f = xs.length >= 3 ? polyfit(xs, ys, 1, ws) : null;
+      const f = xs.length >= 3 && spans(xs) ? polyfit(xs, ys, 1, ws) : null;
       if (f) {
         out.mhA = f.p[1];
         out.mhK = 10 ** f.p[0];
@@ -271,7 +287,7 @@ export function computeMoments(inp: MomentInput): Moments {
         ys.push(Math.log10(rg[i]));
         ws.push(c[i]);
       }
-    const f = xs.length >= 3 ? polyfit(xs, ys, 1, ws) : null;
+    const f = xs.length >= 3 && spans(xs) ? polyfit(xs, ys, 1, ws) : null;
     if (f) out.conformationSlope = { v: f.p[1], e: Math.sqrt(Math.max(0, f.cov[1][1])) };
   }
   return out;

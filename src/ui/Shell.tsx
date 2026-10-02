@@ -6,6 +6,7 @@ import {
   openSample,
   pickFiles,
   reprocessAll,
+  resultsRows,
   saveMethod,
 } from '../actions';
 import { VIEW_TITLES, useStore, type NavPane, type ViewKind } from '../store';
@@ -159,7 +160,6 @@ function useMenus(): { title: string; items: MenuItem[] }[] {
 }
 
 async function copyResults() {
-  const { resultsRows } = await import('../actions');
   const tsv = resultsRows()
     .map((r) => r.map((v) => (typeof v === 'number' ? (Number.isFinite(v) ? String(v) : '') : String(v ?? ''))).join('\t'))
     .join('\n');

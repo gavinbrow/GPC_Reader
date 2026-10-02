@@ -7,10 +7,10 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc --noEmit -p . && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
     "fflate": "^0.8.3",

@@ -3,7 +3,7 @@ import { Chart } from '../chart/Chart';
 import type { ChartHandle, ChartProps } from '../chart/types';
 import { EDITING_VIEWS, useStore, type Tab } from '../store';
 import { IconClose, IconInfo, IconWarning } from './icons';
-import { download, safeFileName } from './format';
+import { download, safeFileName, toCSV } from './format';
 
 /** Whether the surrounding tab is the active one (charts only obey toolbar commands then). */
 export const ActiveTabContext = createContext<{ active: boolean; title: string }>({ active: false, title: '' });
@@ -138,9 +138,58 @@ export const ChartPane = forwardRef<ChartHandle, ChartProps & { primary?: boolea
         .then((b) => download(`${safeFileName(fileName ?? props.title ?? title)}.png`, b));
     }
   }, [cmd, active, primary, fileName, props.title, title]);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [menu]);
+  const name = safeFileName(fileName ?? props.title ?? title);
+  const exportData = () => {
+    const vis = props.series.filter((s) => s.visible !== false);
+    const rows: unknown[][] = [vis.flatMap((s) => [`${s.label} x`, `${s.label} y`])];
+    const n = Math.max(0, ...vis.map((s) => s.x.length));
+    for (let i = 0; i < n; i++) rows.push(vis.flatMap((s): unknown[] => (i < s.x.length ? [s.x[i], s.y[i]] : ['', ''])));
+    download(`${name}.csv`, toCSV(rows), 'text/csv');
+  };
+  const savePng = () => {
+    const url = inner.current?.toPNG();
+    if (url) fetch(url).then((r) => r.blob()).then((b) => download(`${name}.png`, b));
+  };
+  const item = (label: string, fn: () => void) => (
+    <button
+      className="menu-item"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={() => {
+        setMenu(null);
+        fn();
+      }}
+    >
+      <span className="menu-check" />
+      <span className="menu-label">{label}</span>
+    </button>
+  );
   return (
-    <div className="chart-pane">
+    <div
+      className="chart-pane"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        const r = e.currentTarget.getBoundingClientRect();
+        setMenu({ x: e.clientX - r.left, y: e.clientY - r.top });
+      }}
+    >
       <Chart ref={inner} mode={props.mode ?? mode} {...props} />
+      {menu && (
+        <div className="menu-drop context-menu" style={{ left: menu.x, top: menu.y }}>
+          {item('Autoscale', () => inner.current?.resetZoom())}
+          {item('Zoom In', () => inner.current?.zoomBy(1.5))}
+          {item('Zoom Out', () => inner.current?.zoomBy(1 / 1.5))}
+          <div className="menu-sep" />
+          {item('Save Image (PNG)…', savePng)}
+          {item('Export Data (CSV)…', exportData)}
+        </div>
+      )}
     </div>
   );
 });

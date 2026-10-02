@@ -441,7 +441,7 @@ function readExperiment(T: Tables, opts: ParseOptions): Experiment {
   }
 
   // ---------------------------------------------------------------- results & log
-  const storedResults: StoredResult[] = T.rows('WResultData').map((r) => {
+  const storedResults: StoredResult[] = T.rows('WResultData').map((r): StoredResult => {
     const code = num(r.m_nDataName);
     return {
       code,
@@ -451,11 +451,13 @@ function readExperiment(T: Tables, opts: ParseOptions): Experiment {
       category: num(r.dataCategory),
       value: num(r.m_dValue, NaN),
       uncertainty: num(r.m_dHighUncertainty),
-      unit: UNIT_NAMES[num(r.m_nValueUnits)] ?? '',
+      unit: code === 12054 || code === 12566 ? 'mL/(mg cm)' : UNIT_NAMES[num(r.m_nValueUnits)] ?? '',
       index: num(r.indexValue) || undefined,
       unableToCalculate: !!num(r.m_bUnableToCalculate),
     };
   });
+  // Sample-level results (molar mass, radius, mass) first, instrument diagnostics after.
+  storedResults.sort((a, b) => Number(!!a.instrumentClass) - Number(!!b.instrumentClass));
 
   const logRows = T.rows('WLogEntry');
   const log: LogEntry[] = logRows
