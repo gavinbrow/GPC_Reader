@@ -1,0 +1,29 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/astra_reader.py:/app/astra_reader.py:ro
+    environment:
+      - DATABASE_URL=sqlite:///data/astra.db
+      - UPLOAD_DIR=/app/data/uploads
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+      - BACKUP_RETENTION_DAYS=30
+    restart: always
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always

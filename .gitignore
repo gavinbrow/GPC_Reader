@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+data/
+*.db
+*.sqlite
+.env
+.venv/
+venv/
+node_modules/
+dist/
+.DS_Store
+*.egg-info/
+.pytest_cache/.ruff_cache/
+*.tsbuildinfo
