@@ -84,8 +84,7 @@ export function completeMethod(e: Experiment, m: Method): Method {
   const lsPeak = m.peaks[0];
   for (const s of e.series) {
     if (!s.analysable || baselines[s.id]) continue;
-    const vals = m.despike.enabled ? despike(s.values, m.despike.level) : s.values;
-    const b = autoBaseline(s.id, s.time, vals, lsPeak ? [lsPeak.start, lsPeak.end] : undefined);
+    const b = autoBaseline(s.id, s.time, despiked(s, m), lsPeak ? [lsPeak.start, lsPeak.end] : undefined);
     if (b) {
       baselines[s.id] = b;
       changed = true;
@@ -94,26 +93,31 @@ export function completeMethod(e: Experiment, m: Method): Method {
   return changed ? { ...m, baselines } : m;
 }
 
-/** Stage 1: despike + baseline (native time base). Cached per series & settings. */
-const stage1Cache = new WeakMap<RawSeries, Map<string, { despiked: Float64Array; corrected: Float64Array; baseline?: Baseline }>>();
+/** Stage 1: despike (cached per series & despike settings) then baseline subtraction. */
+const despikeCache = new WeakMap<RawSeries, Map<string, Float64Array>>();
 
-function stage1(s: RawSeries, m: Method) {
-  const key = JSON.stringify([m.despike, m.baselines[s.id] ?? null]);
-  let map = stage1Cache.get(s);
+export function despiked(s: RawSeries, m: Method): Float64Array {
+  if (!s.analysable || !m.despike.enabled) return s.values instanceof Float64Array ? s.values : Float64Array.from(s.values);
+  const key = m.despike.level;
+  let map = despikeCache.get(s);
   if (!map) {
     map = new Map();
-    stage1Cache.set(s, map);
+    despikeCache.set(s, map);
   }
-  const hit = map.get(key);
-  if (hit) return hit;
-  const despiked = s.analysable && m.despike.enabled ? despike(s.values, m.despike.level) : Float64Array.from(s.values);
+  let v = map.get(key);
+  if (!v) {
+    v = despike(s.values, m.despike.level);
+    map.set(key, v);
+  }
+  return v;
+}
+
+function stage1(s: RawSeries, m: Method) {
+  const d = despiked(s, m);
   let baseline = m.baselines[s.id];
-  if (baseline) baseline = snapBaseline(s.time, despiked, baseline);
-  const corrected = s.analysable ? subtractBaseline(s.time, despiked, baseline) : despiked;
-  const res = { despiked, corrected, baseline };
-  if (map.size > 30) map.clear();
-  map.set(key, res);
-  return res;
+  if (baseline) baseline = snapBaseline(s.time, d, baseline);
+  const corrected = s.analysable ? subtractBaseline(s.time, d, baseline) : d;
+  return { despiked: d, corrected, baseline };
 }
 
 export function sliceGrid(e: Experiment): Float64Array {
