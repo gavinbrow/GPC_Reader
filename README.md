@@ -41,6 +41,9 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
+On Windows you can double-click `start.bat` instead. It installs the dependencies on first run,
+starts the dev server and opens the browser.
+
 Click **Open sample (PS 30 kDa)**, or drag `.afe8` files onto the window.
 
 ```bash
