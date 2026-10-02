@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Tab } from '../store';
 import type { FitModel, Method, ResultsFit } from '../analysis/method';
 import type { PeakResult, Processed } from '../analysis/pipeline';
-import { distributionOf, type DistributionCurve } from '../analysis/distribution';
+import type { DistributionCurve } from '../analysis/distribution';
 import type { ChartRegion, ChartSeries } from '../chart/types';
 import { ChartPane, ToolButton, ToolLabel, ToolSelect, ToolSep, ViewFrame } from '../ui/ViewFrame';
 import { PropertyGrid, type PGRow } from '../ui/PropertyGrid';
@@ -55,16 +55,14 @@ export function sliceRange(x: ArrayLike<number>, y: ArrayLike<number>, lo: numbe
  * inside the fit range, NaN outside it (a polynomial extrapolated beyond the
  * fit range is meaningless and must not enter distributions or plots).
  */
+/** Values used for moments/distributions (fitted where a model is active; the engine extrapolates safely outside the fit range). */
 export function windowed(pr: PeakResult, kind: 'mass' | 'radius'): Float64Array {
-  const fit = kind === 'mass' ? pr.massFit : pr.radiusFit;
-  const v = kind === 'mass' ? pr.Mused : pr.rgUsed;
-  if (!fit) return v;
-  return v.map((y, i) => (pr.t[i] >= fit.start && pr.t[i] <= fit.end ? y : NaN));
+  return kind === 'mass' ? pr.Mused : pr.rgUsed;
 }
 
-/** Weight-fraction distribution restricted to the fit range. */
+/** Weight-fraction distribution of a peak (the same data the moments use). */
 export function peakDistribution(pr: PeakResult, kind: 'mass' | 'radius'): DistributionCurve | null {
-  return distributionOf(pr.t, pr.c, windowed(pr, kind), !!(kind === 'mass' ? pr.massFit : pr.radiusFit));
+  return kind === 'mass' ? pr.distribution.mass : pr.distribution.radius;
 }
 
 export function PeakSelect({ peaks, value, onChange }: { peaks: PeakResult[]; value: number; onChange: (i: number) => void }) {

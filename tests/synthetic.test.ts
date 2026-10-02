@@ -64,6 +64,21 @@ describe('synthetic polydisperse sample (ground truth)', () => {
     expect(pr.massFit).not.toBeNull();
     const tm = truthMoments(noisy.truth.t, noisy.truth.c, noisy.truth.M, 10, 20);
     expect(pr.moments.Mw.v / tm.Mw).toBeCloseTo(1, 1);
-    expect(pr.distribution.mass!.cumulative.at(-1)).toBeCloseTo(1, 6);
+    expect(pr.distribution.mass!.cumulative.at(-1)).toBeGreaterThan(0.999);
+    expect(pr.distribution.mass!.cumulative.at(-1)).toBeLessThanOrEqual(1 + 1e-12);
+  });
+});
+
+describe('results fitting extrapolation', () => {
+  it('stays finite and continuous outside a narrow fit range', async () => {
+    const { fitResults } = await import('../src/analysis/resultsFit');
+    const t = Float64Array.from({ length: 200 }, (_, i) => 10 + i * 0.05);
+    const M = t.map((x) => 10 ** (6 - 0.3 * (x - 10) + 0.02 * Math.sin(x * 7)));
+    const c = t.map((x) => Math.exp(-0.5 * ((x - 15) / 1.5) ** 2));
+    const f = fitResults(t, M, c, { model: 'Polynomial', order: 5, start: 14, end: 16 })!;
+    const lo = Math.min(...f.values);
+    const hi = Math.max(...f.values);
+    expect(lo).toBeGreaterThan(1e1);
+    expect(hi).toBeLessThan(1e9);
   });
 });

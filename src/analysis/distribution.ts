@@ -51,22 +51,35 @@ export function distributionOf(t: Float64Array, c: Float64Array, y: Float64Array
       dlog[k] = slope > 0 ? pts[i].w / norm / slope : NaN;
       dlin[k] = dlog[k] / (pts[i].x * Math.LN10);
     });
-    return { x, cumulative: cum, differential: dlin, differentialLog: dlog };
+    return trimTails({ x, cumulative: cum, differential: dlin, differentialLog: dlog });
   }
   // Histogram in log space.
   const total = pts.reduce((a, p) => a + p.w, 0);
   const lx = pts.map((p) => Math.log10(p.x));
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const v of lx) {
-    if (v < lo) lo = v;
-    if (v > hi) hi = v;
+  // Bin between the 0.05% and 99.95% weight quantiles so a few noisy,
+  // negligible-weight tail slices cannot stretch the axis.
+  const ord = lx.map((_, i) => i).sort((a, b) => lx[a] - lx[b]);
+  let acc0 = 0;
+  let lo = lx[ord[0]];
+  let hi = lx[ord[ord.length - 1]];
+  let loSet = false;
+  for (const i of ord) {
+    acc0 += pts[i].w / total;
+    if (!loSet && acc0 >= 0.0005) {
+      lo = lx[i];
+      loSet = true;
+    }
+    if (acc0 >= 0.9995) {
+      hi = lx[i];
+      break;
+    }
   }
   if (hi - lo < 1e-6) hi = lo + 0.1;
   const nb = Math.max(10, Math.min(80, Math.round(Math.sqrt(pts.length) * 2)));
   const bw = (hi - lo) / nb;
   const hist = new Float64Array(nb);
   lx.forEach((v, i) => {
+    if (v < lo - bw || v > hi + bw) return; // negligible-weight outliers
     const b = Math.min(nb - 1, Math.max(0, Math.floor((v - lo) / bw)));
     hist[b] += pts[i].w / total;
   });
@@ -103,4 +116,20 @@ export function rangeFractions(d: DistributionCurve, x1: number, x2: number) {
   const lo = at(Math.min(x1, x2));
   const hi = at(Math.max(x1, x2));
   return { below: 100 * lo, within: 100 * (hi - lo), above: 100 * (1 - hi) };
+}
+
+/** Drop the negligible-weight ends (cumulative < 0.05% or > 99.95%) of a sorted distribution. */
+function trimTails(d: DistributionCurve): DistributionCurve {
+  const n = d.x.length;
+  let a = 0;
+  while (a < n - 1 && d.cumulative[a] < 0.0005) a++;
+  let b = n - 1;
+  while (b > a && d.cumulative[b - 1] > 0.9995) b--;
+  a = Math.max(0, a - 1);
+  return {
+    x: d.x.slice(a, b + 1),
+    cumulative: d.cumulative.slice(a, b + 1),
+    differential: d.differential.slice(a, b + 1),
+    differentialLog: d.differentialLog.slice(a, b + 1),
+  };
 }

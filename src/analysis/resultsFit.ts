@@ -39,7 +39,21 @@ export function fitResults(t: Float64Array, y: Float64Array, c: Float64Array, cf
   if (xs.length < order + 2) return null;
   const fit = polyfit(xs, ys, order, ws);
   if (!fit) return null;
+  // Inside the fit range use the polynomial. Outside, extrapolate linearly (in
+  // log space) from the range edge, so high-order polynomials cannot diverge
+  // in the peak tails.
+  const deriv = (x: number) => fit.p.reduce((s, c, k) => (k ? s + k * c * x ** (k - 1) : s), 0);
+  const a = start - t0;
+  const b = end - t0;
+  const ya = polyval(fit.p, a);
+  const yb = polyval(fit.p, b);
+  const sa = deriv(a);
+  const sb = deriv(b);
   const values = new Float64Array(t.length);
-  for (let i = 0; i < t.length; i++) values[i] = 10 ** polyval(fit.p, t[i] - t0);
+  for (let i = 0; i < t.length; i++) {
+    const x = t[i] - t0;
+    const ly = x < a ? ya + sa * (x - a) : x > b ? yb + sb * (x - b) : polyval(fit.p, x);
+    values[i] = 10 ** ly;
+  }
   return { values, coefficients: fit.p, t0, r2: fit.r2, start, end, model: cfg.model, order };
 }
