@@ -78,12 +78,11 @@ export function BaselinesView({ tab }: { tab: Tab }) {
     });
   };
 
-  const series = [
-    {
-      ...toChartSeries(sourceSeries, sourceSeries.time, processed.series[sourceSeries.id].despiked, { visible: true, ls90: sourceSeries.id === ls90?.id }),
-      style: 'line' as const,
-    },
-  ];
+  // Every signal is listed in the legend (as in ASTRA) but only the selected one is drawn.
+  const series = analysable.map((s) => ({
+    ...toChartSeries(s, s.time, processed.series[s.id].despiked, { visible: s.id === source, ls90: s.id === ls90?.id }),
+    style: 'line' as const,
+  }));
   const b = drag && drag.seriesId === source ? drag : processed.series[source]?.baseline;
   const segments: ChartSegment[] = b ? [{ id: source, x1: b.x1, y1: b.y1, x2: b.x2, y2: b.y2, color: '#00a2b8', lineWidth: 2, editable: true }] : [];
   const unit = sourceSeries.kind === 'UV' ? 'absorbance (AU)' : sourceSeries.kind === 'LS' ? 'detector voltage (V)' : sourceSeries.units ? `${sourceSeries.label} (${sourceSeries.units})` : sourceSeries.label;
@@ -109,7 +108,7 @@ export function BaselinesView({ tab }: { tab: Tab }) {
           <ToolButton icon={<IconFit />} onClick={setAll} disabled={!method.baselines[source]} title="Use this signal's baseline time range for every signal (Y values snap to each signal)">
             Set All
           </ToolButton>
-          <ToolHint>Drag to set the range · drag the end points to adjust · ↑/↓ switch signal</ToolHint>
+          <ToolHint>Pick a signal in the legend or with ↑/↓ · drag to set the range · drag the end points to adjust</ToolHint>
         </>
       }
       main={
@@ -118,8 +117,9 @@ export function BaselinesView({ tab }: { tab: Tab }) {
           title={`Define Baselines: ${sourceSeries.label}`}
           series={series}
           segments={segments}
-          legend="none"
+          legend="right"
           mode={mode}
+          onToggleSeries={(id) => select(analysable.findIndex((x) => x.id === id))}
           resetKey={idx}
           xAxis={{ label: 'time (min)' }}
           yAxis={{ label: unit }}
